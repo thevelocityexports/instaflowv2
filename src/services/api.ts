@@ -222,6 +222,22 @@ export class ApiClient {
     });
   }
 
+  // Webhook Diagnostics
+  static async testWebhookVerify(verifyToken?: string): Promise<{
+    success: boolean;
+    simulatedChallenge: string;
+    responseReceived: string | null;
+    error: string | null;
+    testedToken: string;
+    configuredToken: string;
+    message: string;
+  }> {
+    return this.request('/webhooks/test-verify', {
+      method: 'POST',
+      body: JSON.stringify({ verifyToken }),
+    });
+  }
+
   // Auth
   static async getCurrentUser(): Promise<{ user: User }> {
     return this.request('/auth/me');

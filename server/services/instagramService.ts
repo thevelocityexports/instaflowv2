@@ -75,6 +75,10 @@ export class InstagramService {
     return 'https://ais-dev-6t2aafwrddbxusaemb5oqh-714931722661.asia-southeast1.run.app';
   }
 
+  public static getVerifyToken(): string {
+    return this.runtimeConfig.verifyToken || process.env.META_VERIFY_TOKEN || 'instaflow_verify_secret';
+  }
+
   /**
    * Check which Meta environment variables are configured
    */

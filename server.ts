@@ -53,7 +53,8 @@ app.use('/api/instagram', instagramRoutes);
 app.use('/api/comments', commentRoutes);
 app.use('/api/logs', logRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/webhooks', webhookRoutes);
+app.use(['/api/webhooks', '/api/webhook', '/webhooks', '/webhook'], webhookRoutes);
+app.use('/api/instagram/webhook', webhookRoutes);
 app.use('/api/test', testRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/database', databaseRouter);
@@ -61,8 +62,8 @@ app.use('/api/database', databaseRouter);
 // Forward root /api aliases directly to instagramRoutes (e.g. /api/connect-account, /api/connect)
 app.use('/api', instagramRoutes);
 
-// Explicit JSON 404 for unhandled /api routes to prevent raw HTML 404 errors
-app.all('/api/*', (req: Request, res: Response) => {
+// Explicit JSON 404 for unhandled /api and webhook routes to prevent raw HTML 404 errors
+app.all(['/api/*', '/webhooks/*', '/webhook/*'], (req: Request, res: Response) => {
   res.status(404).json({
     error: `API route not found: ${req.method} ${req.originalUrl}`,
     message: `The endpoint ${req.method} ${req.path} does not exist on this server.`,
@@ -95,8 +96,13 @@ async function startServer() {
 
     // Fallback for HTML5 client-side routing in dev mode
     app.use('*', async (req: Request, res: Response, next: NextFunction) => {
-      // Don't intercept API endpoints or static asset requests with file extensions
-      if (req.originalUrl.startsWith('/api') || path.extname(req.originalUrl)) {
+      // Don't intercept API endpoints, webhooks, or static asset requests with file extensions
+      if (
+        req.originalUrl.startsWith('/api') ||
+        req.originalUrl.startsWith('/webhooks') ||
+        req.originalUrl.startsWith('/webhook') ||
+        path.extname(req.originalUrl)
+      ) {
         return next();
       }
       try {

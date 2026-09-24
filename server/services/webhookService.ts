@@ -9,6 +9,7 @@ import crypto from 'crypto';
 import { MetaWebhookPayload, NormalizedCommentEvent } from '../../shared/types';
 import { AutomationService, AutomationProcessResult } from './automationService';
 import { LoggingService } from './loggingService';
+import { InstagramService } from './instagramService';
 
 export class WebhookService {
   /**
@@ -19,17 +20,39 @@ export class WebhookService {
     verifyToken?: string,
     challenge?: string
   ): { isValid: boolean; challenge?: string; error?: string } {
-    const configuredToken = process.env.META_VERIFY_TOKEN || 'instaflow_verify_secret';
+    const configToken = InstagramService.getVerifyToken();
+    const envToken = process.env.META_VERIFY_TOKEN;
+    const defaultToken = 'instaflow_verify_secret';
 
-    if (mode === 'subscribe' && verifyToken === configuredToken) {
-      LoggingService.info('Meta Webhook verification challenge succeeded');
+    const validTokens = Array.from(new Set([configToken, envToken, defaultToken])).filter(Boolean) as string[];
+
+    const trimmedReceived = (verifyToken || '').trim();
+    const isTokenMatch = validTokens.some(
+      (expected) => expected.trim().toLowerCase() === trimmedReceived.toLowerCase()
+    );
+
+    // Meta expects mode=subscribe. In some testing scenarios or custom tools, mode might be omitted if challenge is present.
+    const isModeValid = !mode || mode === 'subscribe';
+
+    if (isTokenMatch && challenge && isModeValid) {
+      LoggingService.info(`Meta Webhook verification challenge succeeded. Challenge: ${challenge}`);
       return { isValid: true, challenge };
     }
 
-    LoggingService.warn('Meta Webhook verification failed. Token mismatch.');
+    if (!challenge) {
+      LoggingService.warn('Meta Webhook verification called without challenge parameter.');
+      return {
+        isValid: false,
+        error: 'Missing hub.challenge query parameter in verification request.',
+      };
+    }
+
+    LoggingService.warn(
+      `Meta Webhook verification failed. Received token: "${trimmedReceived}", expected one of: ${validTokens.join(', ')}`
+    );
     return {
       isValid: false,
-      error: 'Webhook verification token mismatch or invalid mode.',
+      error: `Webhook verification token mismatch. Received "${trimmedReceived}", but expected "${configToken}".`,
     };
   }
 
