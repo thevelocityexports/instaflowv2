@@ -7,6 +7,9 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+dotenv.config();
+
 import {
   User,
   InstagramAccount,
@@ -28,22 +31,37 @@ export class DatabaseService {
   private processedEvents: Set<string> = new Set();
 
   constructor() {
+    this.ensureClient();
+    this.seedDefaultData();
+  }
+
+  public ensureClient(): boolean {
+    if (this.supabase && this.isUsingSupabase) return true;
+
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 
-    if (supabaseUrl && supabaseKey && !supabaseUrl.includes('MY_SUPABASE')) {
+    if (supabaseUrl && supabaseKey && !supabaseUrl.includes('MY_SUPABASE') && !supabaseUrl.includes('your-project')) {
       try {
         this.supabase = createClient(supabaseUrl, supabaseKey);
         this.isUsingSupabase = true;
         LoggingService.info('DatabaseService connected to Supabase PostgreSQL');
+        return true;
       } catch (err) {
         LoggingService.warn('Failed to initialize Supabase client, using local store', err);
       }
-    } else {
-      LoggingService.info('No Supabase credentials provided; running with local memory database');
     }
+    return false;
+  }
 
-    this.seedDefaultData();
+  public isUsingSupabaseDatabase(): boolean {
+    this.ensureClient();
+    return this.isUsingSupabase;
+  }
+
+  public getSupabaseClient(): SupabaseClient | null {
+    this.ensureClient();
+    return this.supabase;
   }
 
   private seedDefaultData() {
@@ -73,12 +91,14 @@ export class DatabaseService {
       id: 'auto_price_01',
       userId: defaultUser.id,
       instagramAccountId: defaultAccount.id,
-      name: 'Product Price & Catalog DM',
+      name: 'Auto-DM links from comments',
       isActive: true,
       triggerType: 'comment',
-      targetPostType: 'all',
+      targetPostType: 'specific',
+      targetPostId: 'post_bangles_reel_99',
+      targetPostCaption: 'PAIR BANGLES - Festive Season Jewellery',
       matchType: 'contains',
-      keywords: ['PRICE', 'PRICE?', 'COST', 'HOW MUCH', 'RATE'],
+      keywords: ['Price', 'Link', 'Shop', 'ORDER', 'Cost'],
       actions: [
         {
           id: 'act_pub_1',
@@ -89,9 +109,9 @@ export class DatabaseService {
         {
           id: 'act_dm_1',
           actionType: 'private_dm',
-          messageTemplate: 'Hi 👋 Thanks for your interest!\nYou can check the product details & price list here:',
-          linkUrl: 'https://example.com/jewelry-catalog',
-          linkButtonText: 'View Price List',
+          messageTemplate: `✨ **Black Beads Bracelet** ✨\n\nElegant Black Beads Bracelet with a simple and stylish design, perfect for everyday wear and traditional looks. 🖤✨\n\n📦 **Available for Order**\n💬 Reply **'ORDER'** to know the price and details.\n🛍️ Check the link below to order online:\n\n📞 **For Orders & Enquiries:**\n9642064207`,
+          linkUrl: 'https://vajramakutajewellers.com/products/black-beads-bracelet',
+          linkButtonText: 'Order Now',
           isEnabled: true,
         },
       ],

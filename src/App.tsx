@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Sidebar, NavTab } from './components/Sidebar';
-import { TopBar } from './components/TopBar';
 import { TestModeModal } from './components/TestModeModal';
 import { AutomationBuilder } from './components/AutomationBuilder';
 import { Dashboard } from './pages/Dashboard';
@@ -16,9 +15,11 @@ import {
   InstagramAccount,
   User,
 } from '../shared/types';
+import { Users, Bot, MessageCircle, Sparkles, Plus } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
+  // Default to 'automations' to match the user's screenshot directly!
+  const [activeTab, setActiveTab] = useState<NavTab>('automations');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [connectedAccount, setConnectedAccount] = useState<InstagramAccount | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -26,11 +27,12 @@ export default function App() {
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [comments, setComments] = useState<ExecutionLog[]>([]);
 
-  // Modals & Builders
-  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
-  const [isBuilderOpen, setIsBuilderOpen] = useState(false);
+  // Sub-view within Automations: 'builder' | 'list'
+  const [automationsView, setAutomationsView] = useState<'builder' | 'list'>('builder');
   const [editingAutomation, setEditingAutomation] = useState<Automation | null>(null);
 
+  // Modals
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -39,7 +41,7 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Load all initial data
+  // Load initial data
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -59,14 +61,19 @@ export default function App() {
         setStats(statsRes.value.stats);
         setRecentActivity(statsRes.value.recentActivity || []);
       }
-      if (autosRes.status === 'fulfilled') setAutomations(autosRes.value.automations);
+      if (autosRes.status === 'fulfilled') {
+        setAutomations(autosRes.value.automations);
+        if (autosRes.value.automations.length > 0 && !editingAutomation) {
+          setEditingAutomation(autosRes.value.automations[0]);
+        }
+      }
       if (commentsRes.status === 'fulfilled') setComments(commentsRes.value.comments);
     } catch (err) {
       console.error('Failed to load application state', err);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [editingAutomation]);
 
   useEffect(() => {
     loadData();
@@ -75,25 +82,23 @@ export default function App() {
   // Handlers for Automations
   const handleCreateNew = () => {
     setEditingAutomation(null);
-    setIsBuilderOpen(true);
+    setAutomationsView('builder');
   };
 
   const handleEditAutomation = (auto: Automation) => {
     setEditingAutomation(auto);
-    setIsBuilderOpen(true);
+    setAutomationsView('builder');
   };
 
   const handleSaveAutomation = async (data: Partial<Automation>) => {
     try {
-      if (editingAutomation) {
+      if (editingAutomation && editingAutomation.id) {
         await ApiClient.updateAutomation(editingAutomation.id, data);
         showToast('Automation updated successfully!');
       } else {
         await ApiClient.createAutomation(data);
         showToast('Automation created successfully!');
       }
-      setIsBuilderOpen(false);
-      setEditingAutomation(null);
       await loadData();
     } catch (err: any) {
       alert(err.message || 'Failed to save automation');
@@ -145,23 +150,8 @@ export default function App() {
     }
   };
 
-  const getPageTitle = () => {
-    switch (activeTab) {
-      case 'dashboard':
-        return 'Dashboard Overview';
-      case 'automations':
-        return 'Comment Automations';
-      case 'comments':
-        return 'Received Comments & Logs';
-      case 'instagram':
-        return 'Instagram Account';
-      case 'settings':
-        return 'Settings & Supabase';
-    }
-  };
-
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden font-sans text-slate-900 antialiased selection:bg-rose-100 selection:text-rose-900">
+    <div className="flex h-screen bg-white overflow-hidden font-sans text-slate-900 antialiased select-none">
       {/* Toast notification */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-xl animate-in fade-in slide-in-from-bottom-4 flex items-center gap-2">
@@ -170,65 +160,46 @@ export default function App() {
         </div>
       )}
 
-      {/* Sidebar Navigation */}
+      {/* Manychat Sidebar (Dot-to-Dot matching Screenshot 1 & 2) */}
       <Sidebar
         activeTab={activeTab}
         setActiveTab={(tab) => {
-          setIsBuilderOpen(false);
           setActiveTab(tab);
+          if (tab === 'automations') {
+            setAutomationsView('builder');
+          }
         }}
         connectedAccount={connectedAccount}
         onOpenTestModal={() => setIsTestModalOpen(true)}
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <TopBar
-          title={isBuilderOpen ? (editingAutomation ? 'Edit Automation' : 'New Automation') : getPageTitle()}
-          subtitle={
-            isBuilderOpen
-              ? 'Configure keyword triggers & automated actions'
-              : connectedAccount?.username
-              ? `@${connectedAccount.username}`
-              : undefined
-          }
-          connectedAccount={connectedAccount}
-          currentUser={currentUser}
-          onOpenTestModal={() => setIsTestModalOpen(true)}
-          onOpenMetaGuide={() => {
-            setIsBuilderOpen(false);
-            setActiveTab('instagram');
-          }}
-        />
-
-        {/* Scrollable View Area */}
-        <main className="flex-1 overflow-y-auto">
-          {isBuilderOpen ? (
-            <AutomationBuilder
-              initialData={editingAutomation}
-              onSave={handleSaveAutomation}
-              onCancel={() => {
-                setIsBuilderOpen(false);
-                setEditingAutomation(null);
-              }}
-              connectedAccountUsername={connectedAccount?.username || 'vajramakutajewellers'}
-            />
-          ) : (
-            <>
-              {activeTab === 'dashboard' && (
-                <Dashboard
-                  stats={stats}
-                  recentActivity={recentActivity}
-                  connectedAccount={connectedAccount}
-                  onOpenTestModal={() => setIsTestModalOpen(true)}
-                  onCreateAutomation={handleCreateNew}
-                  onViewComments={() => setActiveTab('comments')}
-                  onRefresh={loadData}
-                  isLoading={isLoading}
-                />
-              )}
-
-              {activeTab === 'automations' && (
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden bg-white">
+        {/* TAB 1: AUTOMATIONS (The Dot-to-Dot Manychat Builder from Screenshots 1, 2, 3, 4, 5) */}
+        {activeTab === 'automations' && (
+          <div className="flex-1 flex flex-col h-full overflow-hidden">
+            {automationsView === 'builder' ? (
+              <AutomationBuilder
+                initialData={editingAutomation}
+                onSave={handleSaveAutomation}
+                onCancel={() => setAutomationsView('list')}
+                connectedAccountUsername={connectedAccount?.username || 'vajramakutajewellers'}
+              />
+            ) : (
+              <div className="flex-1 overflow-y-auto">
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900">All Automations</h2>
+                    <p className="text-xs text-slate-500">Manage and create comment automation flows</p>
+                  </div>
+                  <button
+                    onClick={handleCreateNew}
+                    className="px-4 py-2 bg-[#0066ff] hover:bg-[#0052cc] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    New Automation
+                  </button>
+                </div>
                 <Automations
                   automations={automations}
                   connectedAccount={connectedAccount}
@@ -239,40 +210,151 @@ export default function App() {
                   onDelete={handleDeleteAutomation}
                   isLoading={isLoading}
                 />
-              )}
+              </div>
+            )}
+          </div>
+        )}
 
-              {activeTab === 'comments' && (
-                <Comments
-                  comments={comments}
-                  onOpenTestModal={() => setIsTestModalOpen(true)}
-                  isLoading={isLoading}
-                />
-              )}
+        {/* TAB 2: HOME (Dashboard Overview) */}
+        {activeTab === 'home' && (
+          <main className="flex-1 overflow-y-auto">
+            <Dashboard
+              stats={stats}
+              recentActivity={recentActivity}
+              connectedAccount={connectedAccount}
+              onOpenTestModal={() => setIsTestModalOpen(true)}
+              onCreateAutomation={() => {
+                setActiveTab('automations');
+                handleCreateNew();
+              }}
+              onViewComments={() => setActiveTab('inbox')}
+              onRefresh={loadData}
+              isLoading={isLoading}
+            />
+          </main>
+        )}
 
-              {activeTab === 'instagram' && (
-                <InstagramConnection
-                  connectedAccount={connectedAccount}
-                  onDisconnect={handleDisconnectInstagram}
-                  onRefresh={loadData}
-                />
-              )}
+        {/* TAB 3: INBOX (Comments & Logs) */}
+        {activeTab === 'inbox' && (
+          <main className="flex-1 overflow-y-auto">
+            <Comments
+              comments={comments}
+              onOpenTestModal={() => setIsTestModalOpen(true)}
+              isLoading={isLoading}
+            />
+          </main>
+        )}
 
-              {activeTab === 'settings' && <Settings />}
-            </>
-          )}
-        </main>
+        {/* TAB 4: CONTACTS */}
+        {activeTab === 'contacts' && (
+          <div className="p-8 max-w-5xl mx-auto space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">Audience & Contacts</h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Instagram users who engaged with your posts and received automated DMs.
+                </p>
+              </div>
+              <span className="px-3 py-1 bg-slate-100 text-slate-700 text-xs font-semibold rounded-full">
+                {new Set(comments.map((c) => c.username)).size} Unique Contacts
+              </span>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[11px]">
+                  <tr>
+                    <th className="py-3 px-4">Contact</th>
+                    <th className="py-3 px-4">Last Activity</th>
+                    <th className="py-3 px-4">Last Comment</th>
+                    <th className="py-3 px-4">Channel</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {comments.slice(0, 10).map((log) => (
+                    <tr key={log.id} className="hover:bg-slate-50">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-[10px]">
+                            {log.username.slice(0, 2).toUpperCase()}
+                          </div>
+                          <span className="font-bold text-slate-900">@{log.username}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-slate-500">
+                        {new Date(log.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="py-3 px-4 text-slate-700 font-medium truncate max-w-xs">
+                        "{log.commentText}"
+                      </td>
+                      <td className="py-3 px-4 text-slate-500">
+                        Instagram DM
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: AI (instaflow AI) */}
+        {activeTab === 'ai' && (
+          <div className="p-8 max-w-3xl mx-auto space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#0066ff] flex items-center justify-center">
+                <Bot className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">instaflow AI Features</h2>
+                <p className="text-xs text-slate-500">Automated copy assistance and keyword recommendations.</p>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
+              <h3 className="text-sm font-bold text-slate-900">Copy Variations Engine</h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Automatically generate humanized variations for your Instagram public comments and direct messages to maintain high engagement and avoid repetitive copy flags.
+              </p>
+              <button
+                onClick={() => {
+                  setActiveTab('automations');
+                  setAutomationsView('builder');
+                }}
+                className="px-4 py-2 bg-[#0066ff] hover:bg-[#0052cc] text-white rounded-xl text-xs font-semibold"
+              >
+                Configure in Automation Builder
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 6: SETTINGS */}
+        {activeTab === 'settings' && (
+          <main className="flex-1 overflow-y-auto">
+            <Settings />
+          </main>
+        )}
+
+        {/* TAB 7: INSTAGRAM CONNECTION */}
+        {activeTab === 'instagram' && (
+          <main className="flex-1 overflow-y-auto">
+            <InstagramConnection
+              connectedAccount={connectedAccount}
+              onDisconnect={handleDisconnectInstagram}
+              onRefresh={loadData}
+            />
+          </main>
+        )}
       </div>
 
-      {/* Test Mode Simulator Modal */}
+      {/* Safe Test Simulator Modal */}
       <TestModeModal
         isOpen={isTestModalOpen}
         onClose={() => setIsTestModalOpen(false)}
         automations={automations.filter((a) => a.isActive)}
         onTestExecuted={loadData}
-        onNavigateToComments={() => {
-          setIsBuilderOpen(false);
-          setActiveTab('comments');
-        }}
+        onNavigateToComments={() => setActiveTab('inbox')}
       />
     </div>
   );

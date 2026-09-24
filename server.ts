@@ -15,6 +15,7 @@ import instagramRoutes from './server/routes/instagramRoutes';
 import webhookRoutes from './server/routes/webhookRoutes';
 import testRoutes from './server/routes/testRoutes';
 import authRoutes from './server/routes/authRoutes';
+import { databaseRouter } from './server/routes/databaseRoutes';
 import { LoggingService } from './server/services/loggingService';
 
 dotenv.config();
@@ -45,6 +46,7 @@ app.use('/api/instagram', instagramRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/test', testRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/database', databaseRouter);
 
 // Health check endpoint
 app.get('/api/health', (_req: Request, res: Response) => {

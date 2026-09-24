@@ -107,6 +107,23 @@ export class ApiClient {
     });
   }
 
+  // Database status
+  static async getDatabaseStatus(): Promise<{
+    success: boolean;
+    provider: 'supabase' | 'local_memory';
+    isUsingSupabase: boolean;
+    projectId?: string | null;
+    envConfig: {
+      supabaseUrlConfigured: boolean;
+      supabaseKeyConfigured: boolean;
+    };
+    tablesVerified: boolean;
+    errorDetail?: string | null;
+    message: string;
+  }> {
+    return this.request('/database/status');
+  }
+
   // Test Mode
   static async sendTestComment(data: {
     username: string;
