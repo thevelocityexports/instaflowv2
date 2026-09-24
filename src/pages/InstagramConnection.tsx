@@ -959,7 +959,7 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
             </div>
             <p className="text-[11px] text-blue-800 leading-relaxed">
               1. <strong>Direct challenge check:</strong> Click <strong>"Test Webhook Verification"</strong> below to confirm your server's verification logic is 100% active and healthy.<br />
-              2. <strong>Vercel Full-Stack Deployment:</strong> If hosting on Vercel (such as <code className="bg-blue-100/90 px-1 py-0.5 rounded font-mono">instaflowv2.vercel.app</code>), the project now includes <code className="bg-blue-100/90 px-1 py-0.5 rounded font-mono">vercel.json</code> and <code className="bg-blue-100/90 px-1 py-0.5 rounded font-mono">api/index.ts</code> so all <code className="bg-blue-100/90 px-1 py-0.5 rounded font-mono">/api/webhooks/*</code> endpoints run as live serverless functions. Push or trigger a redeploy on Vercel to activate.<br />
+              2. <strong>Vercel Full-Stack Deployment:</strong> If hosting on Vercel (such as <code className="bg-blue-100/90 px-1 py-0.5 rounded font-mono">instaflowv2.vercel.app</code>), the project includes <code className="bg-blue-100/90 px-1 py-0.5 rounded font-mono">vercel.json</code> and <code className="bg-blue-100/90 px-1 py-0.5 rounded font-mono">api/</code> serverless functions so all <code className="bg-blue-100/90 px-1 py-0.5 rounded font-mono">/api/webhooks/*</code> endpoints run as live serverless functions. Push or trigger a redeploy on Vercel to activate.<br />
               3. <strong>Instant Local Testing:</strong> You can also use the <strong>Test & Simulate</strong> tab to trigger and verify comment automations immediately without waiting for Meta review!
             </p>
           </div>

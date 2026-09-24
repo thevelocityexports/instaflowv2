@@ -615,7 +615,7 @@ ALTER TABLE public.comment_logs ENABLE ROW LEVEL SECURITY;
                 </div>
                 <p className="text-[11px] text-blue-800 leading-relaxed">
                   Meta sends an automated HTTP GET verification challenge to this URL.
-                  If deploying on Vercel (e.g. <code className="bg-blue-100/90 px-1 py-0.5 rounded font-mono">instaflowv2.vercel.app</code>), the project now includes <code className="bg-blue-100/90 px-1 py-0.5 rounded font-mono">vercel.json</code> and <code className="bg-blue-100/90 px-1 py-0.5 rounded font-mono">api/index.ts</code> so all API and Webhook endpoints run as full-stack serverless functions.
+                  If deploying on Vercel (e.g. <code className="bg-blue-100/90 px-1 py-0.5 rounded font-mono">instaflowv2.vercel.app</code>), the project includes <code className="bg-blue-100/90 px-1 py-0.5 rounded font-mono">vercel.json</code> and <code className="bg-blue-100/90 px-1 py-0.5 rounded font-mono">api/</code> serverless functions so all API and Webhook endpoints run as full-stack serverless functions.
                 </p>
               </div>
 

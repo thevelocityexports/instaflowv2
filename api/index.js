@@ -2041,7 +2041,7 @@ app.use((err, _req, res, _next) => {
   });
 });
 
-// api/index.ts
+// server/api/index.ts
 function handler(req, res) {
   return app(req, res);
 }

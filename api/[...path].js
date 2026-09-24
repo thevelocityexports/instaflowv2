@@ -2041,7 +2041,7 @@ app.use((err, _req, res, _next) => {
   });
 });
 
-// api/[...path].ts
+// server/api/[...path].ts
 function handler(req, res) {
   return app(req, res);
 }
