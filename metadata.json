@@ -1,0 +1,6 @@
+{
+  "name": "InstaFlow - Instagram Comment Automation",
+  "description": "Production-ready Instagram comment-to-DM and public reply automation SaaS with real-time keyword matching and Meta webhook integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
