@@ -296,7 +296,9 @@ export class DatabaseService {
 
   // Instagram Accounts
   async getInstagramAccounts(userId: string): Promise<InstagramAccount[]> {
-    return Array.from(this.accounts.values()).filter((acc) => acc.userId === userId);
+    return Array.from(this.accounts.values())
+      .filter((acc) => acc.userId === userId)
+      .sort((a, b) => (b.isConnected ? 1 : 0) - (a.isConnected ? 1 : 0));
   }
 
   async getConnectedInstagramAccount(userId: string): Promise<InstagramAccount | null> {
@@ -311,6 +313,97 @@ export class DatabaseService {
   async saveInstagramAccount(account: InstagramAccount): Promise<InstagramAccount> {
     this.accounts.set(account.id, account);
     return account;
+  }
+
+  async upsertInstagramAccount(
+    userId: string,
+    data: {
+      username: string;
+      name?: string;
+      instagramUserId?: string;
+      accessToken?: string;
+    }
+  ): Promise<InstagramAccount> {
+    const cleanUsername = data.username.replace(/^@/, '').trim();
+    const instagramUserId = data.instagramUserId?.trim() || `ig_${cleanUsername.toLowerCase()}`;
+    const now = new Date().toISOString();
+
+    // Check if account already exists for user
+    const existing = Array.from(this.accounts.values()).find(
+      (a) =>
+        a.userId === userId &&
+        (a.username.toLowerCase() === cleanUsername.toLowerCase() ||
+          a.instagramUserId === instagramUserId)
+    );
+
+    if (existing) {
+      existing.username = cleanUsername;
+      existing.name = data.name || cleanUsername;
+      existing.isConnected = true;
+      if (data.accessToken) existing.accessToken = data.accessToken;
+      existing.updatedAt = now;
+      this.accounts.set(existing.id, existing);
+
+      if (this.isUsingSupabase && this.supabase) {
+        try {
+          await this.supabase.from('instagram_accounts').upsert({
+            id: existing.id,
+            user_id: userId,
+            instagram_user_id: existing.instagramUserId,
+            username: cleanUsername,
+            name: existing.name,
+            access_token: existing.accessToken,
+            is_connected: true,
+            updated_at: now,
+          });
+        } catch (e) {
+          LoggingService.error('Failed to upsert Instagram account in Supabase', e);
+        }
+      }
+
+      return existing;
+    }
+
+    // Disconnect others if user wants single active account
+    for (const acc of this.accounts.values()) {
+      if (acc.userId === userId) {
+        acc.isConnected = false;
+      }
+    }
+
+    const newAccount: InstagramAccount = {
+      id: `acc_${Date.now()}`,
+      userId,
+      instagramUserId,
+      username: cleanUsername,
+      name: data.name || cleanUsername,
+      accessToken: data.accessToken,
+      isConnected: true,
+      connectedAt: now,
+      updatedAt: now,
+    };
+
+    this.accounts.set(newAccount.id, newAccount);
+
+    if (this.isUsingSupabase && this.supabase) {
+      try {
+        await this.supabase.from('instagram_accounts').insert({
+          id: newAccount.id,
+          user_id: userId,
+          instagram_user_id: instagramUserId,
+          username: cleanUsername,
+          name: newAccount.name,
+          access_token: data.accessToken,
+          is_connected: true,
+          connected_at: now,
+          updated_at: now,
+        });
+      } catch (e) {
+        LoggingService.error('Failed to insert Instagram account into Supabase', e);
+      }
+    }
+
+    return newAccount;
   }
 
   async disconnectInstagramAccount(userId: string, accountId?: string): Promise<boolean> {

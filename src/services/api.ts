@@ -107,6 +107,25 @@ export class ApiClient {
     });
   }
 
+  static async connectInstagramAccount(data: {
+    username: string;
+    name?: string;
+    instagramUserId?: string;
+    accessToken?: string;
+  }): Promise<{ success: boolean; account: InstagramAccount; message: string }> {
+    return this.request('/instagram/connect-account', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  static async switchInstagramAccount(accountId: string): Promise<{ success: boolean; account: InstagramAccount; message: string }> {
+    return this.request('/instagram/switch-account', {
+      method: 'POST',
+      body: JSON.stringify({ accountId }),
+    });
+  }
+
   // Database status
   static async getDatabaseStatus(): Promise<{
     success: boolean;
@@ -122,6 +141,16 @@ export class ApiClient {
     message: string;
   }> {
     return this.request('/database/status');
+  }
+
+  static async runDatabaseMigration(payload: {
+    password?: string;
+    accessToken?: string;
+  }): Promise<{ success: boolean; message: string; error?: string }> {
+    return this.request('/database/migrate', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   }
 
   // Test Mode

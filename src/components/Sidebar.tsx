@@ -57,14 +57,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           onClick={() => setActiveTab('instagram')}
           className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors text-left group"
+          title="Manage connected Instagram account"
         >
           <div className="flex items-center gap-2.5 min-w-0">
-            {/* Vajra Makuta Emblem with PRO Badge */}
+            {/* Account Avatar with PRO Badge */}
             <div className="relative shrink-0">
-              <div className="w-8 h-8 rounded-full bg-[#0a180f] border-2 border-[#c5a059] flex flex-col items-center justify-center text-[7px] font-bold text-[#c5a059] leading-none shadow-xs">
-                <span>VAJRA</span>
-                <span>MAKUTA</span>
-              </div>
+              {connectedAccount?.username === 'thevelocityexports' ? (
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 flex items-center justify-center text-[10px] font-bold text-white shadow-xs">
+                  VE
+                </div>
+              ) : connectedAccount?.username === 'vajramakutajewellers' ? (
+                <div className="w-8 h-8 rounded-full bg-[#0a180f] border-2 border-[#c5a059] flex flex-col items-center justify-center text-[7px] font-bold text-[#c5a059] leading-none shadow-xs">
+                  <span>VAJRA</span>
+                  <span>MAKUTA</span>
+                </div>
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-[10px] font-bold text-white shadow-xs">
+                  {(connectedAccount?.name || connectedAccount?.username || 'IG').slice(0, 2).toUpperCase()}
+                </div>
+              )}
               <span className="absolute -bottom-1 -right-1 bg-[#0066ff] text-white text-[8px] font-extrabold px-1 py-0.2 rounded-xs shadow-xs tracking-tighter">
                 PRO
               </span>
@@ -72,7 +83,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             <div className="min-w-0 flex-1">
               <span className="text-[13px] font-semibold text-slate-800 truncate block">
-                {connectedAccount?.name || 'Vajra Makuta'}
+                {connectedAccount?.name || 'Velocity Exports'}
+              </span>
+              <span className="text-[10px] text-slate-400 truncate block">
+                @{connectedAccount?.username || 'thevelocityexports'}
               </span>
             </div>
           </div>

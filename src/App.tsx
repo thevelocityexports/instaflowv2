@@ -55,7 +55,9 @@ export default function App() {
 
       if (userRes.status === 'fulfilled') setCurrentUser(userRes.value.user);
       if (accsRes.status === 'fulfilled' && accsRes.value.accounts.length > 0) {
-        setConnectedAccount(accsRes.value.accounts[0]);
+        // Select active connected account first, otherwise first available
+        const activeAcc = accsRes.value.accounts.find((a) => a.isConnected) || accsRes.value.accounts[0];
+        setConnectedAccount(activeAcc || null);
       }
       if (statsRes.status === 'fulfilled') {
         setStats(statsRes.value.stats);
@@ -74,6 +76,27 @@ export default function App() {
       setIsLoading(false);
     }
   }, [editingAutomation]);
+
+  useEffect(() => {
+    // Check URL parameters for tab navigation, toast notifications, or OAuth callback status
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab') as NavTab | null;
+    if (tabParam && ['home', 'contacts', 'automations', 'ai', 'inbox', 'settings', 'instagram'].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+    if (params.get('connected') === 'true') {
+      showToast('Instagram account connected successfully!');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    if (params.get('meta_error')) {
+      showToast('Meta OAuth requires META_APP_ID in secrets. Use Instant Connect below!');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    if (params.get('error')) {
+      showToast(params.get('error') || 'Error during Instagram connection');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     loadData();

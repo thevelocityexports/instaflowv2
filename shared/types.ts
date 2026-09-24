@@ -29,6 +29,8 @@ export interface InstagramAccount {
   username: string;
   name: string;
   profilePictureUrl?: string;
+  accessToken?: string;
+  tokenExpiresAt?: string;
   isConnected: boolean;
   connectedAt: string;
   updatedAt: string;

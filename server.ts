@@ -80,6 +80,23 @@ async function startServer() {
       appType: 'spa',
     });
     app.use(vite.middlewares);
+
+    // Fallback for HTML5 client-side routing in dev mode
+    app.use('*', async (req: Request, res: Response, next: NextFunction) => {
+      // Don't intercept API endpoints or static asset requests with file extensions
+      if (req.originalUrl.startsWith('/api') || path.extname(req.originalUrl)) {
+        return next();
+      }
+      try {
+        const fs = await import('fs');
+        let template = fs.readFileSync(path.resolve(__dirname, 'index.html'), 'utf-8');
+        template = await vite.transformIndexHtml(req.originalUrl, template);
+        res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+      } catch (e: any) {
+        vite.ssrFixStacktrace(e);
+        next(e);
+      }
+    });
   }
 
   app.listen(PORT, '0.0.0.0', () => {
