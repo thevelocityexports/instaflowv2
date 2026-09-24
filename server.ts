@@ -10,7 +10,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 
 import automationRoutes from './server/routes/automationRoutes';
-import commentRoutes from './server/routes/commentRoutes';
+import { commentRoutes, logRoutes, dashboardRoutes } from './server/routes/commentRoutes';
 import instagramRoutes from './server/routes/instagramRoutes';
 import webhookRoutes from './server/routes/webhookRoutes';
 import testRoutes from './server/routes/testRoutes';
@@ -38,37 +38,34 @@ app.use(
 );
 app.use(express.urlencoded({ extended: true }));
 
+// Health check endpoints (Placed at top so container/ingress health checks always succeed 200 OK)
+app.get(['/api/health', '/health', '/healthz'], (_req: Request, res: Response) => {
+  res.status(200).json({
+    status: 'ok',
+    service: 'InstaFlow Engine',
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // REST API Endpoints
 app.use('/api/automations', automationRoutes);
 app.use('/api/instagram', instagramRoutes);
 app.use('/api/comments', commentRoutes);
-app.use('/api/logs', commentRoutes);
-app.use('/api/dashboard', commentRoutes);
+app.use('/api/logs', logRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/test', testRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/database', databaseRouter);
 
-// Root fallback aliases for Instagram connection
-app.post(['/api/connect-account', '/api/connect', '/api/direct-connect'], (req, res, next) => {
-  req.url = '/connect-account';
-  instagramRoutes(req, res, next);
-});
+// Forward root /api aliases directly to instagramRoutes (e.g. /api/connect-account, /api/connect)
+app.use('/api', instagramRoutes);
 
 // Explicit JSON 404 for unhandled /api routes to prevent raw HTML 404 errors
 app.all('/api/*', (req: Request, res: Response) => {
   res.status(404).json({
     error: `API route not found: ${req.method} ${req.originalUrl}`,
     message: `The endpoint ${req.method} ${req.path} does not exist on this server.`,
-  });
-});
-
-// Health check endpoint
-app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({
-    status: 'ok',
-    service: 'InstaFlow Engine',
-    timestamp: new Date().toISOString(),
   });
 });
 

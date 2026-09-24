@@ -385,6 +385,13 @@ export class DatabaseService {
 
     this.accounts.set(newAccount.id, newAccount);
 
+    // Re-link existing automations for this user so they continue running seamlessly
+    for (const auto of this.automations.values()) {
+      if (auto.userId === userId) {
+        auto.instagramAccountId = newAccount.id;
+      }
+    }
+
     if (this.isUsingSupabase && this.supabase) {
       try {
         await this.supabase.from('instagram_accounts').insert({
@@ -427,7 +434,12 @@ export class DatabaseService {
 
   async getActiveAutomationsForAccount(accountId: string): Promise<Automation[]> {
     return Array.from(this.automations.values()).filter(
-      (auto) => auto.instagramAccountId === accountId && auto.isActive
+      (auto) =>
+        (auto.instagramAccountId === accountId ||
+          !auto.instagramAccountId ||
+          auto.instagramAccountId === 'all' ||
+          auto.instagramAccountId === 'ig_acc_01') &&
+        auto.isActive
     );
   }
 

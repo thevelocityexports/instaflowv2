@@ -113,13 +113,10 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
       }
     } catch (err: any) {
       console.error('Direct connect error:', err);
-      // If error is 404 or connection issue, provide clear friendly message
-      const errorMsg = err?.message || 'Failed to connect Instagram account.';
+      const errorMsg = err?.message || 'Failed to connect Instagram account. Please try again.';
       setConnectResult({
         type: 'error',
-        text: errorMsg.includes('404')
-          ? `Server connection route refreshed. Please click Connect again.`
-          : errorMsg,
+        text: errorMsg,
       });
     } finally {
       setIsSubmittingAccount(false);
@@ -440,9 +437,9 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
                     <div className="mt-1.5 flex flex-wrap gap-1.5 items-center">
                       <span className="text-[10px] text-slate-400 font-medium">Quick select:</span>
                       {[
-                        { handle: 'panchalohajewels', name: 'Velocity Exports' },
                         { handle: 'restockit', name: 'ReStockIt' },
                         { handle: 'thevelocityexports', name: 'Velocity Exports' },
+                        { handle: 'panchalohajewels', name: 'Velocity Exports' },
                       ].map((item) => (
                         <button
                           key={item.handle}
@@ -451,7 +448,11 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
                             setInputUsername(item.handle);
                             setInputName(item.name);
                           }}
-                          className="text-[10px] px-2 py-0.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-600 rounded font-medium border border-slate-200 transition-colors"
+                          className={`text-[10px] px-2.5 py-0.5 rounded font-semibold border transition-colors ${
+                            inputUsername.toLowerCase() === item.handle.toLowerCase()
+                              ? 'bg-blue-100 text-blue-800 border-blue-300'
+                              : 'bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-600 border-slate-200'
+                          }`}
                         >
                           @{item.handle}
                         </button>

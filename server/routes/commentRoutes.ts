@@ -3,15 +3,11 @@ import { databaseService } from '../services/databaseService';
 import { AuthService, AuthenticatedRequest } from '../services/authService';
 import { LoggingService } from '../services/loggingService';
 
-const router = Router();
+// Comments Router (/api/comments)
+export const commentRoutes = Router();
+commentRoutes.use(AuthService.requireAuth);
 
-router.use(AuthService.requireAuth);
-
-/**
- * GET /api/comments
- * Returns comment execution logs formatted for Comments page
- */
-router.get(['/', '/comments'], async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+commentRoutes.get(['/', '/comments'], async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { status, search, limit } = req.query;
 
@@ -24,15 +20,15 @@ router.get(['/', '/comments'], async (req: AuthenticatedRequest, res: Response):
     res.json({ comments: logs });
   } catch (err) {
     LoggingService.error('Error fetching comments', err);
-    res.status(500).json({ error: 'Failed to retrieve comments' });
+    res.status(500).json({ error: 'Failed to retrieve comments', comments: [] });
   }
 });
 
-/**
- * GET /api/logs
- * Returns raw audit execution logs
- */
-router.get(['/', '/logs'], async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+// Logs Router (/api/logs)
+export const logRoutes = Router();
+logRoutes.use(AuthService.requireAuth);
+
+logRoutes.get(['/', '/logs'], async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const logs = await databaseService.getLogs(req.user!.id, {
       limit: 150,
@@ -40,15 +36,15 @@ router.get(['/', '/logs'], async (req: AuthenticatedRequest, res: Response): Pro
     res.json({ logs });
   } catch (err) {
     LoggingService.error('Error fetching logs', err);
-    res.status(500).json({ error: 'Failed to retrieve logs' });
+    res.status(500).json({ error: 'Failed to retrieve logs', logs: [] });
   }
 });
 
-/**
- * GET /api/dashboard/stats
- * Aggregates statistics for the SaaS dashboard
- */
-router.get(['/', '/stats', '/dashboard/stats'], async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+// Dashboard Router (/api/dashboard)
+export const dashboardRoutes = Router();
+dashboardRoutes.use(AuthService.requireAuth);
+
+dashboardRoutes.get(['/', '/stats', '/dashboard/stats'], async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const stats = await databaseService.getDashboardStats(req.user!.id);
     const recentActivity = await databaseService.getLogs(req.user!.id, { limit: 10 });
@@ -59,8 +55,19 @@ router.get(['/', '/stats', '/dashboard/stats'], async (req: AuthenticatedRequest
     });
   } catch (err) {
     LoggingService.error('Error fetching dashboard stats', err);
-    res.status(500).json({ error: 'Failed to retrieve stats' });
+    res.status(500).json({
+      error: 'Failed to retrieve stats',
+      stats: {
+        totalAutomations: 0,
+        activeAutomations: 0,
+        commentsProcessed: 0,
+        successfulReplies: 0,
+        successfulDMs: 0,
+      },
+      recentActivity: [],
+    });
   }
 });
 
-export default router;
+export default commentRoutes;
+

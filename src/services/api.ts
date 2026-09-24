@@ -101,10 +101,17 @@ export class ApiClient {
   }
 
   static async disconnectInstagram(accountId?: string): Promise<{ success: boolean }> {
-    return this.request('/instagram/disconnect', {
-      method: 'POST',
-      body: JSON.stringify({ accountId }),
-    });
+    try {
+      return await this.request('/instagram/disconnect', {
+        method: 'POST',
+        body: JSON.stringify({ accountId }),
+      });
+    } catch {
+      return await this.request('/disconnect', {
+        method: 'POST',
+        body: JSON.stringify({ accountId }),
+      });
+    }
   }
 
   static async connectInstagramAccount(data: {
@@ -119,28 +126,37 @@ export class ApiClient {
         body: JSON.stringify(data),
       });
     } catch (err: any) {
-      if (err.message && (err.message.includes('404') || err.message.includes('not found'))) {
+      console.warn('Primary connect route attempt failed, trying fallback endpoints:', err?.message);
+      try {
+        return await this.request('/connect-account', {
+          method: 'POST',
+          body: JSON.stringify(data),
+        });
+      } catch (err2: any) {
         try {
           return await this.request('/instagram/connect', {
             method: 'POST',
             body: JSON.stringify(data),
           });
         } catch {
-          return await this.request('/connect-account', {
-            method: 'POST',
-            body: JSON.stringify(data),
-          });
+          throw err2 || err;
         }
       }
-      throw err;
     }
   }
 
   static async switchInstagramAccount(accountId: string): Promise<{ success: boolean; account: InstagramAccount; message: string }> {
-    return this.request('/instagram/switch-account', {
-      method: 'POST',
-      body: JSON.stringify({ accountId }),
-    });
+    try {
+      return await this.request('/instagram/switch-account', {
+        method: 'POST',
+        body: JSON.stringify({ accountId }),
+      });
+    } catch {
+      return await this.request('/switch-account', {
+        method: 'POST',
+        body: JSON.stringify({ accountId }),
+      });
+    }
   }
 
   // Database status
