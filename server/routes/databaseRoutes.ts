@@ -88,14 +88,26 @@ databaseRouter.post('/migrate', async (req: Request, res: Response) => {
       });
     }
 
-    const sqlPath = path.resolve(process.cwd(), 'server', 'db', 'schema.sql');
-    if (!fs.existsSync(sqlPath)) {
+    let sqlContent = '';
+    const possiblePaths = [
+      path.resolve(process.cwd(), 'server', 'db', 'schema.sql'),
+      path.resolve(process.cwd(), 'dist', 'server', 'db', 'schema.sql'),
+      path.resolve(__dirname, '..', 'db', 'schema.sql'),
+      path.resolve(__dirname, 'schema.sql'),
+    ];
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        sqlContent = fs.readFileSync(p, 'utf-8');
+        break;
+      }
+    }
+
+    if (!sqlContent) {
       return res.status(500).json({
         success: false,
-        error: 'schema.sql migration file not found on server.',
+        error: 'schema.sql migration file could not be located on server. Please use the SQL Schema copy button in Settings to run migrations manually.',
       });
     }
-    const sqlContent = fs.readFileSync(sqlPath, 'utf-8');
 
     // Method 1: Supabase Personal Access Token
     if (accessToken) {

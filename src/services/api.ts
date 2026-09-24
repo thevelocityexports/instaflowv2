@@ -29,9 +29,11 @@ export class ApiClient {
       let errorMessage = errorBody.error || errorBody.message;
       if (!errorMessage) {
         if (res.status === 404) {
-          errorMessage = `Backend route ${endpoint} returned 404. If deployed on Vercel, please redeploy so vercel.json and api/ serverless functions are active.`;
+          errorMessage = `Backend route ${endpoint} returned 404. If running on Vercel, ensure the latest commit with api/ functions and vercel.json is deployed.`;
+        } else if (res.status === 500) {
+          errorMessage = `Backend server encountered an error processing ${endpoint} (HTTP 500).`;
         } else {
-          errorMessage = `Request failed with status ${res.status}`;
+          errorMessage = `Request to ${endpoint} failed with status ${res.status}`;
         }
       }
       throw new Error(errorMessage);

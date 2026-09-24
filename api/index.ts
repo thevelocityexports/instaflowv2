@@ -1,8 +1,12 @@
 /**
  * Vercel Serverless Function Entrypoint
- * Routes incoming API and Webhook requests to the InstaFlow Express application.
+ * Handles /api root, health checks, and proxied requests
  */
 
-import app from '../server/app';
+import { app } from '../server/app';
 
-export default app;
+export default function handler(req: any, res: any) {
+  return app(req, res);
+}
+
+export { app };

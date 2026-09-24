@@ -3,18 +3,18 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api/index.ts"
+      "destination": "/api/$1"
     },
     {
       "source": "/webhooks/(.*)",
-      "destination": "/api/index.ts"
+      "destination": "/api/webhooks/$1"
     },
     {
       "source": "/webhook/(.*)",
-      "destination": "/api/index.ts"
+      "destination": "/api/webhooks/$1"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api/|webhooks/|webhook/).*)",
       "destination": "/index.html"
     }
   ]
