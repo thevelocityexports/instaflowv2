@@ -11,6 +11,8 @@
 
 import { LoggingService } from './loggingService';
 import { MetaConfigStatus } from '../../shared/types';
+import fs from 'fs';
+import path from 'path';
 
 export class InstagramService {
   // Meta Graph API configuration constants - isolated for easy version upgrades
@@ -28,25 +30,122 @@ export class InstagramService {
     'business_management',
   ].join(',');
 
+  private static configFilePath = path.resolve(process.cwd(), 'data', 'meta-config.json');
+
+  private static runtimeConfig: {
+    appId?: string;
+    appSecret?: string;
+    verifyToken?: string;
+    redirectUri?: string;
+    webhookCallbackUrl?: string;
+  } = InstagramService.loadPersistedConfig();
+
+  private static loadPersistedConfig() {
+    try {
+      if (fs.existsSync(InstagramService.configFilePath)) {
+        const content = fs.readFileSync(InstagramService.configFilePath, 'utf-8');
+        return JSON.parse(content);
+      }
+    } catch (e) {
+      console.warn('Failed to load persisted Meta config:', e);
+    }
+    return {};
+  }
+
+  private static savePersistedConfig() {
+    try {
+      const dir = path.dirname(InstagramService.configFilePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(InstagramService.configFilePath, JSON.stringify(InstagramService.runtimeConfig, null, 2));
+    } catch (e) {
+      console.warn('Failed to save Meta config file:', e);
+    }
+  }
+
+  /**
+   * Determine primary public URL of the application
+   */
+  public static getPublicBaseUrl(): string {
+    if (process.env.APP_URL && !process.env.APP_URL.includes('localhost')) {
+      return process.env.APP_URL.replace(/\/$/, '');
+    }
+    // Default to the live Cloud Run preview URL if on Cloud Run or dev environment
+    return 'https://ais-dev-6t2aafwrddbxusaemb5oqh-714931722661.asia-southeast1.run.app';
+  }
+
   /**
    * Check which Meta environment variables are configured
    */
   static getConfigStatus(): MetaConfigStatus {
-    const appId = process.env.META_APP_ID;
-    const appSecret = process.env.META_APP_SECRET;
-    const redirectUri = process.env.META_REDIRECT_URI || `${process.env.APP_URL || 'http://localhost:3000'}/api/instagram/callback`;
-    const verifyToken = process.env.META_VERIFY_TOKEN;
+    const appId = this.runtimeConfig.appId || process.env.META_APP_ID;
+    const appSecret = this.runtimeConfig.appSecret || process.env.META_APP_SECRET;
+    const defaultBaseUrl = this.getPublicBaseUrl();
+
+    const redirectUri =
+      this.runtimeConfig.redirectUri ||
+      process.env.META_REDIRECT_URI ||
+      `${defaultBaseUrl}/api/instagram/callback`;
+
+    const verifyToken =
+      this.runtimeConfig.verifyToken ||
+      process.env.META_VERIFY_TOKEN ||
+      'instaflow_verify_secret';
+
+    const webhookCallbackUrl =
+      this.runtimeConfig.webhookCallbackUrl ||
+      `${defaultBaseUrl}/api/webhooks/instagram`;
+
+    const isAppIdSet = Boolean(appId && !appId.includes('MY_META') && appId.trim().length > 3);
+    const isAppSecretSet = Boolean(appSecret && !appSecret.includes('MY_META') && appSecret.trim().length > 5);
 
     return {
-      appIdConfigured: Boolean(appId && !appId.includes('MY_META')),
-      appSecretConfigured: Boolean(appSecret && !appSecret.includes('MY_META')),
+      appIdConfigured: isAppIdSet,
+      appSecretConfigured: isAppSecretSet,
       redirectUriConfigured: Boolean(redirectUri),
-      verifyTokenConfigured: Boolean(verifyToken && !verifyToken.includes('MY_VERIFY')),
-      appId: appId && !appId.includes('MY_META') ? appId : undefined,
+      verifyTokenConfigured: Boolean(verifyToken),
+      appId: isAppIdSet ? appId : undefined,
+      appSecretMasked: isAppSecretSet && appSecret ? `${appSecret.slice(0, 4)}••••••••${appSecret.slice(-3)}` : undefined,
       redirectUri,
-      verifyToken: verifyToken && !verifyToken.includes('MY_VERIFY') ? verifyToken : undefined,
-      webhookCallbackUrl: `${process.env.APP_URL || 'http://localhost:3000'}/api/webhooks/instagram`,
+      verifyToken,
+      webhookCallbackUrl,
     };
+  }
+
+  /**
+   * Dynamically update Meta Developer credentials at runtime
+   */
+  static updateConfig(data: {
+    appId?: string;
+    appSecret?: string;
+    verifyToken?: string;
+    redirectUri?: string;
+    webhookCallbackUrl?: string;
+  }): MetaConfigStatus {
+    if (data.appId !== undefined) {
+      this.runtimeConfig.appId = data.appId.trim();
+      process.env.META_APP_ID = this.runtimeConfig.appId;
+    }
+    if (data.appSecret !== undefined) {
+      this.runtimeConfig.appSecret = data.appSecret.trim();
+      process.env.META_APP_SECRET = this.runtimeConfig.appSecret;
+    }
+    if (data.verifyToken !== undefined && data.verifyToken.trim()) {
+      this.runtimeConfig.verifyToken = data.verifyToken.trim();
+      process.env.META_VERIFY_TOKEN = this.runtimeConfig.verifyToken;
+    }
+    if (data.redirectUri !== undefined && data.redirectUri.trim()) {
+      this.runtimeConfig.redirectUri = data.redirectUri.trim();
+      process.env.META_REDIRECT_URI = this.runtimeConfig.redirectUri;
+    }
+    if (data.webhookCallbackUrl !== undefined && data.webhookCallbackUrl.trim()) {
+      this.runtimeConfig.webhookCallbackUrl = data.webhookCallbackUrl.trim();
+    }
+
+    this.savePersistedConfig();
+    LoggingService.info('Updated Meta Developer API configuration');
+    return this.getConfigStatus();
   }
 
   /**

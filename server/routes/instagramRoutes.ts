@@ -16,6 +16,39 @@ router.get('/config-status', (_req, res) => {
 });
 
 /**
+ * POST /api/instagram/config
+ * Saves and updates Meta App ID, Secret, and webhook settings
+ */
+router.post('/config', (req, res): void => {
+  try {
+    const { appId, appSecret, verifyToken, redirectUri, webhookCallbackUrl } = req.body;
+
+    if (appId !== undefined && typeof appId === 'string' && appId.trim().length > 0 && isNaN(Number(appId.trim()))) {
+      // Validate that App ID is numeric as required by Meta
+      res.status(400).json({ error: 'Meta App ID must be a numeric ID provided by developers.facebook.com' });
+      return;
+    }
+
+    const updatedConfig = InstagramService.updateConfig({
+      appId,
+      appSecret,
+      verifyToken,
+      redirectUri,
+      webhookCallbackUrl,
+    });
+
+    res.json({
+      success: true,
+      message: 'Meta Developer configuration saved successfully!',
+      config: updatedConfig,
+    });
+  } catch (err: any) {
+    LoggingService.error('Failed to update Meta configuration', err);
+    res.status(500).json({ error: err.message || 'Failed to save Meta configuration' });
+  }
+});
+
+/**
  * GET /api/instagram/accounts
  */
 router.get('/accounts', AuthService.requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {

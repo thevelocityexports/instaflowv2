@@ -15,10 +15,20 @@ import {
   HelpCircle,
   Zap,
   Lock,
+  Instagram,
+  Globe,
+  Eye,
+  EyeOff,
+  Save,
+  X,
 } from 'lucide-react';
 import { ApiClient } from '../services/api';
+import { MetaConfigStatus } from '../../shared/types';
 
 export const Settings: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<'meta' | 'database'>('meta');
+
+  // Supabase Database State
   const [copiedSql, setCopiedSql] = useState(false);
   const [dbPassword, setDbPassword] = useState('');
   const [isMigrating, setIsMigrating] = useState(false);
@@ -38,6 +48,17 @@ export const Settings: React.FC = () => {
   } | null>(null);
   const [isChecking, setIsChecking] = useState(false);
 
+  // Meta Developer Credentials State
+  const [metaConfig, setMetaConfig] = useState<MetaConfigStatus | null>(null);
+  const [inputAppId, setInputAppId] = useState('');
+  const [inputAppSecret, setInputAppSecret] = useState('');
+  const [inputVerifyToken, setInputVerifyToken] = useState('instaflow_verify_secret');
+  const [inputWebhookUrl, setInputWebhookUrl] = useState('');
+  const [showSecret, setShowSecret] = useState(false);
+  const [isSavingMeta, setIsSavingMeta] = useState(false);
+  const [metaMsg, setMetaMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
   const checkStatus = async () => {
     setIsChecking(true);
     try {
@@ -50,9 +71,62 @@ export const Settings: React.FC = () => {
     }
   };
 
+  const loadMetaConfig = async () => {
+    try {
+      const res = await ApiClient.getMetaConfigStatus();
+      setMetaConfig(res.config);
+      if (res.config?.appId) setInputAppId(res.config.appId);
+      if (res.config?.verifyToken) setInputVerifyToken(res.config.verifyToken);
+      if (res.config?.webhookCallbackUrl) setInputWebhookUrl(res.config.webhookCallbackUrl);
+    } catch (err) {
+      console.error('Failed to load Meta configuration', err);
+    }
+  };
+
   useEffect(() => {
     checkStatus();
+    loadMetaConfig();
   }, []);
+
+  const handleCopyField = (text: string, field: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const handleSaveMetaConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputAppId.trim()) {
+      setMetaMsg({ type: 'error', text: 'Please enter your Meta App ID.' });
+      return;
+    }
+    if (!inputAppSecret.trim() && !metaConfig?.appSecretConfigured) {
+      setMetaMsg({ type: 'error', text: 'Please enter your Meta App Secret.' });
+      return;
+    }
+
+    setIsSavingMeta(true);
+    setMetaMsg(null);
+    try {
+      const res = await ApiClient.saveMetaConfig({
+        appId: inputAppId.trim(),
+        appSecret: inputAppSecret.trim() || undefined,
+        verifyToken: inputVerifyToken.trim() || undefined,
+        webhookCallbackUrl: inputWebhookUrl.trim() || undefined,
+      });
+
+      if (res && res.success) {
+        setMetaConfig(res.config);
+        setMetaMsg({ type: 'success', text: 'Meta Developer API credentials saved successfully!' });
+      } else {
+        setMetaMsg({ type: 'error', text: res.message || 'Failed to save configuration.' });
+      }
+    } catch (err: any) {
+      setMetaMsg({ type: 'error', text: err.message || 'Failed to save Meta credentials.' });
+    } finally {
+      setIsSavingMeta(false);
+    }
+  };
 
   const handleRunAutomaticMigration = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -190,13 +264,266 @@ ALTER TABLE public.comment_logs ENABLE ROW LEVEL SECURITY;
 
   return (
     <div className="p-8 space-y-8 max-w-5xl mx-auto font-sans">
-      <div>
-        <h2 className="text-xl font-bold tracking-tight text-slate-900">Supabase Database Setup</h2>
-        <p className="text-xs text-slate-500 mt-1">
-          Connect your Supabase PostgreSQL database to persist Instagram automations, accounts, and execution logs.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight text-slate-900">Settings & Integrations</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Configure your Meta Developer credentials, Instagram OAuth, Webhooks, and Supabase PostgreSQL persistence.
+          </p>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setActiveTab('meta')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-2 ${
+              activeTab === 'meta'
+                ? 'bg-white text-slate-900 shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Instagram className="w-3.5 h-3.5 text-rose-500" />
+            Meta Developer API
+            {metaConfig?.appIdConfigured && metaConfig?.appSecretConfigured ? (
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            ) : (
+              <span className="w-2 h-2 rounded-full bg-amber-500" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('database')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-2 ${
+              activeTab === 'database'
+                ? 'bg-white text-slate-900 shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Database className="w-3.5 h-3.5 text-emerald-600" />
+            Supabase Database
+            {dbStatus?.isUsingSupabase ? (
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            ) : (
+              <span className="w-2 h-2 rounded-full bg-amber-500" />
+            )}
+          </button>
+        </div>
       </div>
 
+      {activeTab === 'meta' && (
+        <div className="space-y-6 animate-in fade-in">
+          {/* Meta API Settings Card */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs p-6 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 flex items-center justify-center text-white">
+                    <Instagram className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">Meta Developer API Configuration</h3>
+                    <p className="text-xs text-slate-500">Official Graph API v21.0 Credentials</p>
+                  </div>
+                </div>
+              </div>
+
+              <span
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 ${
+                  metaConfig?.appIdConfigured && metaConfig?.appSecretConfigured
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'bg-amber-50 text-amber-700 border border-amber-200'
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    metaConfig?.appIdConfigured && metaConfig?.appSecretConfigured ? 'bg-emerald-500' : 'bg-amber-500'
+                  }`}
+                />
+                {metaConfig?.appIdConfigured && metaConfig?.appSecretConfigured
+                  ? 'Configured & Active'
+                  : 'App ID & Secret Required'}
+              </span>
+            </div>
+
+            {metaMsg && (
+              <div
+                className={`p-4 rounded-xl text-xs flex items-center justify-between gap-3 ${
+                  metaMsg.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
+                    : 'bg-rose-50 text-rose-900 border border-rose-200'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {metaMsg.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  )}
+                  <span className="font-medium">{metaMsg.text}</span>
+                </div>
+                <button onClick={() => setMetaMsg(null)} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveMetaConfig} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Meta App ID */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <Key className="w-3.5 h-3.5 text-slate-400" />
+                      Meta App ID *
+                    </label>
+                    <a
+                      href="https://developers.facebook.com/apps/"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5"
+                    >
+                      Find in Meta Dashboard
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  </div>
+                  <input
+                    type="text"
+                    value={inputAppId}
+                    onChange={(e) => setInputAppId(e.target.value)}
+                    placeholder="e.g. 152014204821362"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0066ff] shadow-2xs transition-all"
+                    required
+                  />
+                  <p className="text-[10px] text-slate-400">
+                    Your numeric Application ID from Meta App Dashboard → App settings → Basic.
+                  </p>
+                </div>
+
+                {/* Meta App Secret */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-slate-400" />
+                      Meta App Secret *
+                    </label>
+                    {metaConfig?.appSecretMasked && (
+                      <span className="text-[10px] font-mono text-emerald-600">
+                        Saved: {metaConfig.appSecretMasked}
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showSecret ? 'text' : 'password'}
+                      value={inputAppSecret}
+                      onChange={(e) => setInputAppSecret(e.target.value)}
+                      placeholder={
+                        metaConfig?.appSecretConfigured
+                          ? '•••••••••••••••••••• (Leave blank to keep saved secret)'
+                          : 'Paste App Secret from Meta dashboard'
+                      }
+                      className="w-full pl-3.5 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0066ff] shadow-2xs transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSecret(!showSecret)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                    >
+                      {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    App Secret used for HMAC-SHA256 signature verification and OAuth token exchange.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Webhook Callback URL */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <Globe className="w-3.5 h-3.5 text-slate-400" />
+                      Webhook Callback URL
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleCopyField(inputWebhookUrl || metaConfig?.webhookCallbackUrl || '', 'url')
+                      }
+                      className="text-[11px] text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                      {copiedField === 'url' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                      Copy URL
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={inputWebhookUrl}
+                    onChange={(e) => setInputWebhookUrl(e.target.value)}
+                    placeholder="https://.../api/webhooks/instagram"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0066ff] shadow-2xs transition-all"
+                  />
+                  <p className="text-[10px] text-slate-400">
+                    Paste into Meta Webhooks setup. Meta requires a public <code className="font-mono">https://</code> URL.
+                  </p>
+                </div>
+
+                {/* Verify Token */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
+                      Webhook Verify Token
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyField(inputVerifyToken, 'token')}
+                      className="text-[11px] text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                      {copiedField === 'token' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                      Copy Token
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={inputVerifyToken}
+                    onChange={(e) => setInputVerifyToken(e.target.value)}
+                    placeholder="instaflow_verify_secret"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0066ff] shadow-2xs transition-all"
+                  />
+                  <p className="text-[10px] text-slate-400">
+                    Matches the verify token you enter in Meta's Webhook challenge box.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                <p className="text-[11px] text-slate-500">
+                  Valid OAuth Redirect URI to register in Facebook Login settings:{' '}
+                  <code className="px-1.5 py-0.5 bg-slate-100 rounded font-mono text-[10px] text-slate-800">
+                    {metaConfig?.redirectUri || 'https://.../api/instagram/callback'}
+                  </code>
+                </p>
+
+                <button
+                  type="submit"
+                  disabled={isSavingMeta}
+                  className="px-5 py-2.5 bg-[#0066ff] hover:bg-[#0052cc] text-white rounded-xl text-xs font-semibold shadow-xs flex items-center gap-2 transition-colors disabled:opacity-50"
+                >
+                  <Save className={`w-3.5 h-3.5 ${isSavingMeta ? 'animate-spin' : ''}`} />
+                  {isSavingMeta ? 'Saving...' : 'Save Meta Credentials'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'database' && (
+        <div className="space-y-8 animate-in fade-in">
       {/* Connection Status Card */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs p-6 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
@@ -559,6 +886,8 @@ ALTER TABLE public.comment_logs ENABLE ROW LEVEL SECURITY;
           ))}
         </div>
       </div>
+      </div>
+      )}
     </div>
   );
 };

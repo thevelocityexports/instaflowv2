@@ -100,6 +100,19 @@ export class ApiClient {
     return this.request('/instagram/config-status');
   }
 
+  static async saveMetaConfig(data: {
+    appId?: string;
+    appSecret?: string;
+    verifyToken?: string;
+    redirectUri?: string;
+    webhookCallbackUrl?: string;
+  }): Promise<{ success: boolean; message: string; config: MetaConfigStatus }> {
+    return this.request('/instagram/config', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   static async disconnectInstagram(accountId?: string): Promise<{ success: boolean }> {
     try {
       return await this.request('/instagram/disconnect', {

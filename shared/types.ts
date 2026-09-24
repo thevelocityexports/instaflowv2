@@ -146,6 +146,7 @@ export interface MetaConfigStatus {
   redirectUriConfigured: boolean;
   verifyTokenConfigured: boolean;
   appId?: string;
+  appSecretMasked?: string;
   redirectUri?: string;
   verifyToken?: string;
   webhookCallbackUrl?: string;
