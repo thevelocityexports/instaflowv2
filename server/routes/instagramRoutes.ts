@@ -86,90 +86,115 @@ router.get('/callback', async (req, res): Promise<void> => {
 });
 
 /**
- * POST /api/instagram/switch-account
+ * POST /api/instagram/switch-account or /api/instagram/switch
  * Activates an existing connected Instagram account
  */
-router.post('/switch-account', AuthService.requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { accountId } = req.body;
-    if (!accountId) {
-      res.status(400).json({ error: 'accountId is required' });
-      return;
+router.post(
+  ['/switch-account', '/switch'],
+  AuthService.requireAuth,
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { accountId } = req.body;
+      if (!accountId) {
+        res.status(400).json({ error: 'accountId is required' });
+        return;
+      }
+
+      const accounts = await databaseService.getInstagramAccounts(req.user!.id);
+      const target = accounts.find((a) => a.id === accountId);
+      if (!target) {
+        res.status(404).json({ error: 'Account not found' });
+        return;
+      }
+
+      const updated = await databaseService.upsertInstagramAccount(req.user!.id, {
+        username: target.username,
+        name: target.name,
+        instagramUserId: target.instagramUserId,
+        accessToken: target.accessToken,
+      });
+
+      res.json({
+        success: true,
+        message: `Active account switched to @${updated.username}`,
+        account: updated,
+      });
+    } catch (err) {
+      LoggingService.error('Error switching Instagram account', err);
+      res.status(500).json({ error: 'Failed to switch Instagram account' });
     }
-
-    const accounts = await databaseService.getInstagramAccounts(req.user!.id);
-    const target = accounts.find((a) => a.id === accountId);
-    if (!target) {
-      res.status(404).json({ error: 'Account not found' });
-      return;
-    }
-
-    const updated = await databaseService.upsertInstagramAccount(req.user!.id, {
-      username: target.username,
-      name: target.name,
-      instagramUserId: target.instagramUserId,
-      accessToken: target.accessToken,
-    });
-
-    res.json({
-      success: true,
-      message: `Active account switched to @${updated.username}`,
-      account: updated,
-    });
-  } catch (err) {
-    LoggingService.error('Error switching Instagram account', err);
-    res.status(500).json({ error: 'Failed to switch Instagram account' });
   }
-});
+);
 
 /**
- * POST /api/instagram/connect-account
+ * POST /api/instagram/connect-account, /connect, /direct-connect, /instant-connect
  * Connects or switches an Instagram account directly by username and details
  */
-router.post('/connect-account', AuthService.requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { username, name, instagramUserId, accessToken } = req.body;
-    if (!username || typeof username !== 'string' || !username.trim()) {
-      res.status(400).json({ error: 'Instagram username is required' });
-      return;
+router.post(
+  ['/connect-account', '/connect', '/direct-connect', '/instant-connect'],
+  AuthService.requireAuth,
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { username, name, instagramUserId, accessToken } = req.body;
+      if (!username || typeof username !== 'string' || !username.trim()) {
+        res.status(400).json({ error: 'Instagram username is required' });
+        return;
+      }
+
+      const account = await databaseService.upsertInstagramAccount(req.user!.id, {
+        username: username.trim(),
+        name: name?.trim() || username.trim(),
+        instagramUserId: instagramUserId?.trim(),
+        accessToken: accessToken?.trim(),
+      });
+
+      res.json({
+        success: true,
+        message: `Connected @${account.username} successfully`,
+        account,
+      });
+    } catch (err) {
+      LoggingService.error('Error connecting Instagram account', err);
+      res.status(500).json({ error: 'Failed to connect Instagram account' });
     }
+  }
+);
 
-    const account = await databaseService.upsertInstagramAccount(req.user!.id, {
-      username: username.trim(),
-      name: name?.trim() || username.trim(),
-      instagramUserId: instagramUserId?.trim(),
-      accessToken: accessToken?.trim(),
-    });
-
-    res.json({
-      success: true,
-      message: `Connected @${account.username} successfully`,
-      account,
-    });
+/**
+ * GET /api/instagram/connect-account
+ * Returns currently connected account info
+ */
+router.get('/connect-account', AuthService.requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const account = await databaseService.getConnectedInstagramAccount(req.user!.id);
+    res.json({ account, isConnected: !!account });
   } catch (err) {
-    LoggingService.error('Error connecting Instagram account', err);
-    res.status(500).json({ error: 'Failed to connect Instagram account' });
+    res.status(500).json({ error: 'Failed to retrieve connection status' });
   }
 });
 
 /**
- * POST /api/instagram/disconnect
+ * POST /api/instagram/disconnect or /logout
  */
-router.post('/disconnect', AuthService.requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { accountId } = req.body;
-    const disconnected = await databaseService.disconnectInstagramAccount(req.user!.id, accountId);
+router.post(
+  ['/disconnect', '/logout'],
+  AuthService.requireAuth,
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { accountId } = req.body;
+      const disconnected = await databaseService.disconnectInstagramAccount(req.user!.id, accountId);
 
-    if (!disconnected) {
-      res.status(404).json({ error: 'Instagram account not found or already disconnected' });
-      return;
+      if (!disconnected) {
+        res.status(404).json({ error: 'Instagram account not found or already disconnected' });
+        return;
+      }
+
+      res.json({ success: true, message: 'Instagram account disconnected successfully' });
+    } catch (err) {
+      LoggingService.error('Error disconnecting Instagram account', err);
+      res.status(500).json({ error: 'Failed to disconnect account' });
     }
-
-    res.json({ success: true, message: 'Instagram account disconnected successfully' });
-  } catch (err) {
-    LoggingService.error('Error disconnecting Instagram account', err);
-    res.status(500).json({ error: 'Failed to disconnect account' });
   }
-});
+);
 
 export default router;

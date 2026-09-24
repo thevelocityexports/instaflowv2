@@ -40,13 +40,28 @@ app.use(express.urlencoded({ extended: true }));
 
 // REST API Endpoints
 app.use('/api/automations', automationRoutes);
-app.use('/api/comments', commentRoutes);
-app.use('/api', commentRoutes); // Serves /api/logs & /api/dashboard/stats
 app.use('/api/instagram', instagramRoutes);
+app.use('/api/comments', commentRoutes);
+app.use('/api/logs', commentRoutes);
+app.use('/api/dashboard', commentRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/test', testRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/database', databaseRouter);
+
+// Root fallback aliases for Instagram connection
+app.post(['/api/connect-account', '/api/connect', '/api/direct-connect'], (req, res, next) => {
+  req.url = '/connect-account';
+  instagramRoutes(req, res, next);
+});
+
+// Explicit JSON 404 for unhandled /api routes to prevent raw HTML 404 errors
+app.all('/api/*', (req: Request, res: Response) => {
+  res.status(404).json({
+    error: `API route not found: ${req.method} ${req.originalUrl}`,
+    message: `The endpoint ${req.method} ${req.path} does not exist on this server.`,
+  });
+});
 
 // Health check endpoint
 app.get('/api/health', (_req: Request, res: Response) => {

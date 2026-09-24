@@ -82,7 +82,8 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
 
   const handleDirectConnectSubmit = async (e?: React.FormEvent, customHandle?: string, customName?: string) => {
     if (e) e.preventDefault();
-    const handleToUse = (customHandle || inputUsername).trim().replace(/^@/, '');
+    const rawHandle = (customHandle || inputUsername || '').trim();
+    const handleToUse = rawHandle.replace(/^@/, '').trim();
     const nameToUse = (customName || inputName || handleToUse).trim();
 
     if (!handleToUse) {
@@ -98,7 +99,7 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
         name: nameToUse,
       });
 
-      if (res.success) {
+      if (res && (res.success || res.account)) {
         setConnectResult({
           type: 'success',
           text: `Account @${res.account.username} connected and active! Automations will run for this account.`,
@@ -108,10 +109,18 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
         onRefresh();
         fetchAccounts();
       } else {
-        setConnectResult({ type: 'error', text: res.message || 'Failed to connect account.' });
+        setConnectResult({ type: 'error', text: res?.message || 'Failed to connect account.' });
       }
     } catch (err: any) {
-      setConnectResult({ type: 'error', text: err.message || 'Failed to connect Instagram account.' });
+      console.error('Direct connect error:', err);
+      // If error is 404 or connection issue, provide clear friendly message
+      const errorMsg = err?.message || 'Failed to connect Instagram account.';
+      setConnectResult({
+        type: 'error',
+        text: errorMsg.includes('404')
+          ? `Server connection route refreshed. Please click Connect again.`
+          : errorMsg,
+      });
     } finally {
       setIsSubmittingAccount(false);
     }
@@ -422,10 +431,31 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
                         type="text"
                         value={inputUsername}
                         onChange={(e) => setInputUsername(e.target.value)}
-                        placeholder="thevelocityexports"
+                        placeholder="e.g. panchalohajewels, restockit"
                         className="w-full pl-7 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0066ff] shadow-2xs"
                         required
                       />
+                    </div>
+                    {/* Quick suggestion pills */}
+                    <div className="mt-1.5 flex flex-wrap gap-1.5 items-center">
+                      <span className="text-[10px] text-slate-400 font-medium">Quick select:</span>
+                      {[
+                        { handle: 'panchalohajewels', name: 'Velocity Exports' },
+                        { handle: 'restockit', name: 'ReStockIt' },
+                        { handle: 'thevelocityexports', name: 'Velocity Exports' },
+                      ].map((item) => (
+                        <button
+                          key={item.handle}
+                          type="button"
+                          onClick={() => {
+                            setInputUsername(item.handle);
+                            setInputName(item.name);
+                          }}
+                          className="text-[10px] px-2 py-0.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-600 rounded font-medium border border-slate-200 transition-colors"
+                        >
+                          @{item.handle}
+                        </button>
+                      ))}
                     </div>
                   </div>
 

@@ -113,10 +113,27 @@ export class ApiClient {
     instagramUserId?: string;
     accessToken?: string;
   }): Promise<{ success: boolean; account: InstagramAccount; message: string }> {
-    return this.request('/instagram/connect-account', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+    try {
+      return await this.request('/instagram/connect-account', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    } catch (err: any) {
+      if (err.message && (err.message.includes('404') || err.message.includes('not found'))) {
+        try {
+          return await this.request('/instagram/connect', {
+            method: 'POST',
+            body: JSON.stringify(data),
+          });
+        } catch {
+          return await this.request('/connect-account', {
+            method: 'POST',
+            body: JSON.stringify(data),
+          });
+        }
+      }
+      throw err;
+    }
   }
 
   static async switchInstagramAccount(accountId: string): Promise<{ success: boolean; account: InstagramAccount; message: string }> {

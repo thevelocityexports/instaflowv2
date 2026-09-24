@@ -11,7 +11,7 @@ router.use(AuthService.requireAuth);
  * GET /api/comments
  * Returns comment execution logs formatted for Comments page
  */
-router.get('/comments', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.get(['/', '/comments'], async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { status, search, limit } = req.query;
 
@@ -32,7 +32,7 @@ router.get('/comments', async (req: AuthenticatedRequest, res: Response): Promis
  * GET /api/logs
  * Returns raw audit execution logs
  */
-router.get('/logs', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.get(['/', '/logs'], async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const logs = await databaseService.getLogs(req.user!.id, {
       limit: 150,
@@ -48,7 +48,7 @@ router.get('/logs', async (req: AuthenticatedRequest, res: Response): Promise<vo
  * GET /api/dashboard/stats
  * Aggregates statistics for the SaaS dashboard
  */
-router.get('/dashboard/stats', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.get(['/', '/stats', '/dashboard/stats'], async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const stats = await databaseService.getDashboardStats(req.user!.id);
     const recentActivity = await databaseService.getLogs(req.user!.id, { limit: 10 });
