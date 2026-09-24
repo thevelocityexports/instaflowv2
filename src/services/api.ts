@@ -12,7 +12,7 @@ import {
   MetaConfigStatus,
 } from '../../shared/types';
 
-const API_BASE = '/api';
+const API_BASE = ((import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') || '') + '/api';
 
 export class ApiClient {
   private static async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
@@ -26,7 +26,15 @@ export class ApiClient {
 
     if (!res.ok) {
       const errorBody = await res.json().catch(() => ({}));
-      throw new Error(errorBody.error || errorBody.message || `Request failed with status ${res.status}`);
+      let errorMessage = errorBody.error || errorBody.message;
+      if (!errorMessage) {
+        if (res.status === 404) {
+          errorMessage = `Backend route ${endpoint} returned 404. If deployed on Vercel, please redeploy so vercel.json and api/ serverless functions are active.`;
+        } else {
+          errorMessage = `Request failed with status ${res.status}`;
+        }
+      }
+      throw new Error(errorMessage);
     }
 
     return res.json();

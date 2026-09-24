@@ -615,7 +615,7 @@ ALTER TABLE public.comment_logs ENABLE ROW LEVEL SECURITY;
                 </div>
                 <p className="text-[11px] text-blue-800 leading-relaxed">
                   Meta sends an automated HTTP GET verification challenge to this URL.
-                  If Meta reports that the URL couldn't be validated due to a 302 redirect or firewall, you can route requests through a free public tunnel (e.g. <code className="bg-blue-100/90 px-1 py-0.5 rounded font-mono">ngrok http 3000</code> or Cloudflare Tunnel) and paste your public tunnel URL above.
+                  If deploying on Vercel (e.g. <code className="bg-blue-100/90 px-1 py-0.5 rounded font-mono">instaflowv2.vercel.app</code>), the project now includes <code className="bg-blue-100/90 px-1 py-0.5 rounded font-mono">vercel.json</code> and <code className="bg-blue-100/90 px-1 py-0.5 rounded font-mono">api/index.ts</code> so all API and Webhook endpoints run as full-stack serverless functions.
                 </p>
               </div>
 

@@ -30,7 +30,11 @@ export class InstagramService {
     'business_management',
   ].join(',');
 
-  private static configFilePath = path.resolve(process.cwd(), 'data', 'meta-config.json');
+  private static configFilePath = path.resolve(
+    process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME ? '/tmp' : process.cwd(),
+    'data',
+    'meta-config.json'
+  );
 
   private static runtimeConfig: {
     appId?: string;
@@ -70,6 +74,12 @@ export class InstagramService {
   public static getPublicBaseUrl(): string {
     if (process.env.APP_URL && !process.env.APP_URL.includes('localhost')) {
       return process.env.APP_URL.replace(/\/$/, '');
+    }
+    if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+      return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+    }
+    if (process.env.VERCEL_URL) {
+      return `https://${process.env.VERCEL_URL}`;
     }
     // Default to the live Cloud Run preview URL if on Cloud Run or dev environment
     return 'https://ais-dev-6t2aafwrddbxusaemb5oqh-714931722661.asia-southeast1.run.app';
