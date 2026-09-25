@@ -62,6 +62,33 @@ router.get('/accounts', AuthService.requireAuth, async (req: AuthenticatedReques
 });
 
 /**
+ * POST /api/instagram/sync-comments
+ * Manually or automatically polls live Instagram comments and processes auto-replies
+ */
+router.post('/sync-comments', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const user = await AuthService.resolveUser(req);
+    const userId = user ? user.id : 'usr_default_01';
+    const account = await databaseService.getConnectedInstagramAccount(userId);
+
+    if (!account) {
+      res.status(400).json({ success: false, error: 'No connected Instagram account found' });
+      return;
+    }
+
+    const result = await InstagramService.syncCommentsForAccount(account);
+    res.json({
+      success: true,
+      message: `Synced comments for @${account.username}: ${result.processedCount} new replies triggered.`,
+      result,
+    });
+  } catch (err: any) {
+    LoggingService.error('Error in sync-comments endpoint', err);
+    res.status(500).json({ success: false, error: err?.message || 'Failed to sync comments' });
+  }
+});
+
+/**
  * GET /api/instagram/connect
  * Initiates Meta OAuth flow by redirecting to Meta OAuth dialog
  */

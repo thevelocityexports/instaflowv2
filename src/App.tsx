@@ -129,6 +129,27 @@ export default function App() {
 
   useEffect(() => {
     loadData();
+
+    // Background interval to sync comments and refresh activity every 15s
+    const poller = setInterval(async () => {
+      try {
+        await ApiClient.syncComments();
+        // Light refresh of dashboard stats and comments
+        const [statsRes, commentsRes] = await Promise.allSettled([
+          ApiClient.getDashboardStats(),
+          ApiClient.getComments(),
+        ]);
+        if (statsRes.status === 'fulfilled') {
+          setStats(statsRes.value.stats);
+          setRecentActivity(statsRes.value.recentActivity || []);
+        }
+        if (commentsRes.status === 'fulfilled') {
+          setComments(commentsRes.value.comments || []);
+        }
+      } catch {}
+    }, 15000);
+
+    return () => clearInterval(poller);
   }, [loadData]);
 
   // Handlers for Automations

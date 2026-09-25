@@ -253,6 +253,16 @@ export class ApiClient {
     });
   }
 
+  static async syncComments(): Promise<{ success: boolean; message: string; result?: any }> {
+    try {
+      return await this.request('/instagram/sync-comments', {
+        method: 'POST',
+      });
+    } catch (e: any) {
+      return { success: false, message: e?.message || 'Failed to sync' };
+    }
+  }
+
   static async switchInstagramAccount(accountId: string): Promise<{ success: boolean; account: InstagramAccount; message: string }> {
     try {
       return await this.request('/instagram/switch-account', {

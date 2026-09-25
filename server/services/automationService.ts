@@ -37,6 +37,7 @@ export class AutomationService {
   /**
    * Evaluates whether a comment satisfies an automation's keyword conditions.
    * Case-insensitive, whitespace normalized.
+   * Supports "Any Word" / all comments wildcard ('*', 'any', 'all', or empty keyword list).
    */
   static matchKeyword(
     commentText: string,
@@ -45,13 +46,24 @@ export class AutomationService {
   ): { isMatch: boolean; matchedKeyword?: string } {
     const cleanComment = this.normalizeText(commentText);
 
-    if (!cleanComment || !keywords || keywords.length === 0) {
+    if (!cleanComment) {
       return { isMatch: false };
+    }
+
+    // Wildcard / Any comment trigger
+    if (
+      !keywords ||
+      keywords.length === 0 ||
+      keywords.some((k) => !k || k === '*' || k.toLowerCase() === 'any' || k.toLowerCase() === 'all')
+    ) {
+      return { isMatch: true, matchedKeyword: 'Any comment' };
     }
 
     for (const rawKeyword of keywords) {
       const cleanKeyword = this.normalizeText(rawKeyword);
-      if (!cleanKeyword) continue;
+      if (!cleanKeyword || cleanKeyword === '*' || cleanKeyword === 'any' || cleanKeyword === 'all') {
+        return { isMatch: true, matchedKeyword: rawKeyword.trim() || 'Any comment' };
+      }
 
       if (matchType === 'exact') {
         if (cleanComment === cleanKeyword) {
@@ -127,11 +139,12 @@ export class AutomationService {
     let account = await databaseService.getAccountById(accountId);
     if (!account) {
       // Try to find default or connected account
-      account = await databaseService.getConnectedInstagramAccount('usr_default_01');
+      account = (await databaseService.getConnectedInstagramAccount('usr_default_01')) || (await databaseService.getConnectedInstagramAccount(userId));
     }
 
     const targetAccountId = account ? account.id : accountId;
     const targetUserId = account ? account.userId : 'usr_default_01';
+    const accessToken = account?.accessToken || process.env.META_ACCESS_TOKEN || process.env.INSTAGRAM_ACCESS_TOKEN;
 
     const activeAutomations = await databaseService.getActiveAutomationsForAccount(targetAccountId);
 
@@ -164,7 +177,8 @@ export class AutomationService {
         automation.targetPostType === 'specific' &&
         automation.targetPostId &&
         postId &&
-        automation.targetPostId !== postId
+        automation.targetPostId !== postId &&
+        automation.targetPostId !== 'selected_reel'
       ) {
         // Specific post filter did not match
         continue;
@@ -199,6 +213,7 @@ export class AutomationService {
             const replyResult = await InstagramService.sendPublicCommentReply({
               commentId,
               message: action.messageTemplate,
+              accessToken,
               isTestMode,
             });
 
@@ -252,9 +267,11 @@ export class AutomationService {
           try {
             const dmResult = await InstagramService.sendPrivateDM({
               recipientUserId: userId,
+              commentId,
               message: action.messageTemplate,
               linkUrl: action.linkUrl,
               linkButtonText: action.linkButtonText,
+              accessToken,
               isTestMode,
             });
 

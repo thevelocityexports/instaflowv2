@@ -299,48 +299,60 @@ export class InstagramService {
       };
     }
 
-    try {
-      const url = `${this.GRAPH_API_BASE}/${commentId}/replies`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ message }),
-      });
+    const cleanToken = accessToken.trim();
+    const candidateEndpoints = [
+      `https://graph.facebook.com/v21.0/${commentId}/replies`,
+      `https://graph.instagram.com/v21.0/${commentId}/replies`,
+      `https://graph.facebook.com/${commentId}/replies`,
+      `https://graph.instagram.com/${commentId}/replies`,
+    ];
 
-      const data = await response.json();
-      if (!response.ok || data.error) {
-        const errorMsg = data.error?.message || 'Instagram could not process this public reply.';
-        LoggingService.error('Meta API error sending comment reply', data.error);
-        return {
-          success: false,
-          error: errorMsg,
-          metaResponse: LoggingService.sanitizeForDb(data),
-        };
+    let lastError: any = null;
+
+    for (const url of candidateEndpoints) {
+      try {
+        LoggingService.info(`Posting comment reply to Meta endpoint: ${url}`);
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${cleanToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ message }),
+        });
+
+        const data = await response.json();
+        if (response.ok && !data.error) {
+          LoggingService.info(`✓ Successfully posted comment reply: ${data.id}`);
+          return {
+            success: true,
+            replyId: data.id,
+            metaResponse: { id: data.id },
+          };
+        } else if (data.error) {
+          lastError = data.error;
+          LoggingService.warn(`Meta API error sending comment reply on ${url}: ${data.error.message}`);
+        }
+      } catch (err: any) {
+        lastError = err;
+        LoggingService.warn(`Exception sending comment reply to ${url}`, err);
       }
-
-      return {
-        success: true,
-        replyId: data.id,
-        metaResponse: { id: data.id },
-      };
-    } catch (err) {
-      LoggingService.error('Exception sending comment reply to Meta', err);
-      return {
-        success: false,
-        error: 'Instagram could not process this action. Check connection and try again.',
-      };
     }
+
+    return {
+      success: false,
+      error: lastError?.message || 'Instagram could not process this public reply. Check token permissions.',
+      metaResponse: lastError ? LoggingService.sanitizeForDb(lastError) : undefined,
+    };
   }
 
   /**
    * ACTION 2: Send Private Instagram Direct Message (DM)
-   * POST /me/messages or /{ig-user-id}/messages
+   * POST /me/messages or /{ig-user-id}/messages (Supports comment_id for comment-to-DM)
    */
   static async sendPrivateDM(options: {
     recipientUserId: string;
+    commentId?: string;
     message: string;
     linkUrl?: string;
     linkButtonText?: string;
@@ -352,7 +364,7 @@ export class InstagramService {
     metaResponse?: Record<string, unknown>;
     error?: string;
   }> {
-    const { recipientUserId, message, linkUrl, linkButtonText, accessToken, isTestMode } = options;
+    const { recipientUserId, commentId, message, linkUrl, linkButtonText, accessToken, isTestMode } = options;
 
     const fullMessage = linkUrl 
       ? `${message}\n\n${linkButtonText ? `🔗 ${linkButtonText}: ` : ''}${linkUrl}`
@@ -380,43 +392,68 @@ export class InstagramService {
       };
     }
 
-    try {
-      const url = `${this.GRAPH_API_BASE}/me/messages`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          recipient: { id: recipientUserId },
-          message: { text: fullMessage },
-        }),
-      });
+    const cleanToken = accessToken.trim();
 
-      const data = await response.json();
-      if (!response.ok || data.error) {
-        const errorMsg = data.error?.message || 'Instagram could not send direct message.';
-        LoggingService.error('Meta API error sending private DM', data.error);
-        return {
-          success: false,
-          error: errorMsg,
-          metaResponse: LoggingService.sanitizeForDb(data),
-        };
-      }
-
-      return {
-        success: true,
-        messageId: data.message_id,
-        metaResponse: { message_id: data.message_id },
-      };
-    } catch (err) {
-      LoggingService.error('Exception sending private DM to Meta', err);
-      return {
-        success: false,
-        error: 'Instagram could not process this DM. Check connection and try again.',
-      };
+    // Prepare recipient variations:
+    // 1. Comment ID (Meta comment-to-DM conversion endpoint)
+    // 2. User ID / IGSID
+    const recipientPayloads: any[] = [];
+    if (commentId) {
+      recipientPayloads.push({ comment_id: commentId });
     }
+    if (recipientUserId && recipientUserId !== 'unknown_ig_user') {
+      recipientPayloads.push({ id: recipientUserId });
+    }
+
+    const candidateUrls = [
+      `https://graph.facebook.com/v21.0/me/messages`,
+      `https://graph.instagram.com/v21.0/me/messages`,
+      `https://graph.facebook.com/me/messages`,
+      `https://graph.instagram.com/me/messages`,
+    ];
+
+    let lastError: any = null;
+
+    for (const recipient of recipientPayloads) {
+      for (const url of candidateUrls) {
+        try {
+          LoggingService.info(`Sending Meta private DM to ${JSON.stringify(recipient)} via ${url}`);
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${cleanToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              recipient,
+              message: { text: fullMessage },
+            }),
+          });
+
+          const data = await response.json();
+          if (response.ok && !data.error) {
+            LoggingService.info(`✓ Successfully sent private DM: ${data.message_id || data.recipient_id || 'sent'}`);
+            return {
+              success: true,
+              messageId: data.message_id || data.id,
+              metaResponse: { message_id: data.message_id || data.id },
+            };
+          } else if (data.error) {
+            lastError = data.error;
+            LoggingService.warn(`Meta private DM error on ${url}: ${data.error.message}`);
+          }
+        } catch (err: any) {
+          lastError = err;
+          LoggingService.warn(`Exception sending private DM to ${url}`, err);
+        }
+      }
+    }
+
+    return {
+      success: false,
+      error: lastError?.message || 'Instagram could not send direct message.',
+      metaResponse: lastError ? LoggingService.sanitizeForDb(lastError) : undefined,
+    };
   }
 
   /**
@@ -598,5 +635,150 @@ export class InstagramService {
       media: mediaResult.media,
     };
   }
+
+  /**
+   * ACTION 5: Fetch Live Comments on Media & Trigger Automations
+   * Checks top recent posts/reels for new comments from Meta Graph API.
+   */
+  static async syncCommentsForAccount(account: {
+    id: string;
+    userId: string;
+    username: string;
+    accessToken?: string;
+    instagramUserId?: string;
+  }): Promise<{
+    success: boolean;
+    syncedCount: number;
+    processedCount: number;
+    error?: string;
+  }> {
+    if (!account.accessToken) {
+      return { success: false, syncedCount: 0, processedCount: 0, error: 'No access token available' };
+    }
+
+    const cleanToken = account.accessToken.trim();
+
+    try {
+      // 1. Get recent media
+      const mediaRes = await this.getAccountMedia({
+        instagramUserId: account.instagramUserId,
+        accessToken: cleanToken,
+        limit: 10,
+      });
+
+      if (!mediaRes.success || !mediaRes.media || mediaRes.media.length === 0) {
+        return { success: true, syncedCount: 0, processedCount: 0 };
+      }
+
+      let totalSynced = 0;
+      let totalProcessed = 0;
+
+      // Lazy import to prevent circular dependency
+      const { databaseService } = await import('./databaseService');
+      const { AutomationService } = await import('./automationService');
+
+      for (const item of mediaRes.media.slice(0, 8)) {
+        const candidateCommentUrls = [
+          `https://graph.facebook.com/v21.0/${item.id}/comments?fields=id,text,timestamp,username,from&limit=25&access_token=${cleanToken}`,
+          `https://graph.instagram.com/v21.0/${item.id}/comments?fields=id,text,timestamp,username,from&limit=25&access_token=${cleanToken}`,
+          `https://graph.instagram.com/${item.id}/comments?fields=id,text,timestamp,username,from&limit=25&access_token=${cleanToken}`,
+        ];
+
+        for (const cUrl of candidateCommentUrls) {
+          try {
+            const resp = await fetch(cUrl);
+            const data = await resp.json();
+
+            if (resp.ok && data.data && Array.isArray(data.data)) {
+              totalSynced += data.data.length;
+
+              for (const comment of data.data) {
+                if (!comment.id || !comment.text) continue;
+
+                // Don't reply to our own comments
+                const commentUsername = comment.username || comment.from?.username || '';
+                if (commentUsername.toLowerCase() === account.username.toLowerCase()) {
+                  continue;
+                }
+
+                // Check idempotency
+                const isAlreadyProcessed = await databaseService.isEventProcessed(comment.id);
+                if (isAlreadyProcessed) {
+                  continue;
+                }
+
+                LoggingService.info(`Live poller discovered new comment [${comment.id}] from @${commentUsername}: "${comment.text}"`);
+
+                const normalizedEvent = {
+                  platform: 'instagram' as const,
+                  accountId: account.id,
+                  commentId: comment.id,
+                  userId: comment.from?.id || commentUsername || 'ig_user',
+                  username: commentUsername || 'instagram_user',
+                  commentText: comment.text,
+                  postId: item.id,
+                  timestamp: comment.timestamp || new Date().toISOString(),
+                  isTestMode: false,
+                };
+
+                await AutomationService.processComment(normalizedEvent);
+                totalProcessed++;
+              }
+              break; // Found valid comments endpoint for this media item
+            }
+          } catch (cErr) {
+            // Try next candidate
+          }
+        }
+      }
+
+      return {
+        success: true,
+        syncedCount: totalSynced,
+        processedCount: totalProcessed,
+      };
+    } catch (err: any) {
+      LoggingService.error('Error syncing live comments for account', err);
+      return {
+        success: false,
+        syncedCount: 0,
+        processedCount: 0,
+        error: err?.message || 'Error syncing comments',
+      };
+    }
+  }
+
+  /**
+   * Syncs comments for all active connected accounts
+   */
+  static async syncAllActiveAccounts(): Promise<void> {
+    try {
+      const { databaseService } = await import('./databaseService');
+      const accounts = await databaseService.getInstagramAccounts('usr_default_01');
+      for (const acc of accounts) {
+        if (acc.isConnected && acc.accessToken) {
+          await this.syncCommentsForAccount(acc);
+        }
+      }
+    } catch (e) {
+      // Suppress background sync errors
+    }
+  }
+
+  private static pollerInterval: NodeJS.Timeout | null = null;
+
+  /**
+   * Starts background comment synchronization poller
+   */
+  static startCommentPoller(): void {
+    if (this.pollerInterval) return;
+    LoggingService.info('Starting Instagram live comment background poller (12s interval)...');
+    this.pollerInterval = setInterval(() => {
+      this.syncAllActiveAccounts();
+    }, 12000);
+  }
 }
+
+// Automatically start comment poller on module load
+InstagramService.startCommentPoller();
 
