@@ -19,29 +19,54 @@ export class AuthService {
    */
   static async resolveUser(req: Request): Promise<User | null> {
     const authHeader = req.headers.authorization;
-    const customUserId = req.headers['x-user-id'] as string | undefined;
+    const customUserId = (req.headers['x-user-id'] as string | undefined) || (req.headers['x-user-email'] as string | undefined);
 
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7).trim();
-      if (token && token !== 'undefined' && token !== 'null') {
+      if (token && token !== 'undefined' && token !== 'null' && token !== '') {
         try {
           const user = (await databaseService.getUser(token)) || (await databaseService.getUserByEmail(token));
           if (user) return user;
+
+          if (token.includes('@')) {
+            const name = token.split('@')[0];
+            const newUser: User = {
+              id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+              email: token.toLowerCase(),
+              fullName: name.charAt(0).toUpperCase() + name.slice(1),
+              createdAt: new Date().toISOString(),
+            };
+            await databaseService.saveUser(newUser);
+            return newUser;
+          }
         } catch (err) {
           LoggingService.warn('Could not resolve user from bearer token', err);
         }
       }
     }
 
-    if (customUserId && customUserId !== 'undefined' && customUserId !== 'null') {
+    if (customUserId && customUserId !== 'undefined' && customUserId !== 'null' && customUserId !== '') {
       try {
-        const user = await databaseService.getUser(customUserId);
+        const user = (await databaseService.getUser(customUserId.trim())) || (await databaseService.getUserByEmail(customUserId.trim()));
         if (user) return user;
+
+        if (customUserId.includes('@')) {
+          const name = customUserId.split('@')[0];
+          const newUser: User = {
+            id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            email: customUserId.toLowerCase(),
+            fullName: name.charAt(0).toUpperCase() + name.slice(1),
+            createdAt: new Date().toISOString(),
+          };
+          await databaseService.saveUser(newUser);
+          return newUser;
+        }
       } catch (err) {}
     }
 
-    // Default fallback
-    return databaseService.getUser('usr_default_01');
+    // Default fallback to ensure preview/demo continuity if single user
+    const defaultUser = await databaseService.getUser('usr_default_01');
+    return defaultUser || null;
   }
 
   /**

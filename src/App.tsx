@@ -62,32 +62,48 @@ export default function App() {
         ApiClient.getComments(),
       ]);
 
-      if (userRes.status === 'fulfilled' && userRes.value.user) {
-        setCurrentUser(userRes.value.user);
+      if (userRes.status === 'fulfilled') {
+        if (userRes.value?.user) {
+          setCurrentUser(userRes.value.user);
+          localStorage.setItem('instaflow_auth_user', JSON.stringify(userRes.value.user));
+        } else {
+          setCurrentUser(null);
+        }
       }
-      if (accsRes.status === 'fulfilled' && accsRes.value.accounts.length > 0) {
-        // Select active connected account first, otherwise first available
-        const activeAcc = accsRes.value.accounts.find((a) => a.isConnected) || accsRes.value.accounts[0];
-        setConnectedAccount(activeAcc || null);
+
+      if (accsRes.status === 'fulfilled') {
+        const accounts = accsRes.value?.accounts || [];
+        if (accounts.length > 0) {
+          const activeAcc = accounts.find((a) => a.isConnected) || accounts[0];
+          setConnectedAccount(activeAcc || null);
+        } else {
+          setConnectedAccount(null);
+        }
       }
+
       if (statsRes.status === 'fulfilled') {
         setStats(statsRes.value.stats);
         setRecentActivity(statsRes.value.recentActivity || []);
       }
+
       if (autosRes.status === 'fulfilled') {
-        setAutomations(autosRes.value.automations);
-        if (autosRes.value.automations.length > 0 && !editingAutomation) {
-          setEditingAutomation(autosRes.value.automations[0]);
+        const auts = autosRes.value.automations || [];
+        setAutomations(auts);
+        if (auts.length > 0) {
+          setEditingAutomation(auts[0]);
+        } else {
+          setEditingAutomation(null);
         }
       }
-      if (commentsRes.status === 'fulfilled') setComments(commentsRes.value.comments);
+
+      if (commentsRes.status === 'fulfilled') setComments(commentsRes.value.comments || []);
     } catch (err) {
       console.error('Failed to load application state', err);
     } finally {
       setIsLoading(false);
       setIsCheckingAuth(false);
     }
-  }, [editingAutomation]);
+  }, []);
 
   useEffect(() => {
     // Check URL parameters for tab navigation, toast notifications, or OAuth callback status
@@ -201,10 +217,12 @@ export default function App() {
 
   const handleSignOut = async () => {
     await ApiClient.signOut();
+    localStorage.removeItem('instaflow_active_reels');
     setCurrentUser(null);
     setConnectedAccount(null);
     setAutomations([]);
     setRecentActivity([]);
+    setComments([]);
     showToast('Signed out successfully.');
   };
 
@@ -213,7 +231,12 @@ export default function App() {
     return (
       <AuthPage
         onAuthSuccess={(user) => {
+          localStorage.removeItem('instaflow_active_reels');
           setCurrentUser(user);
+          setConnectedAccount(null);
+          setAutomations([]);
+          setRecentActivity([]);
+          setComments([]);
           loadData();
         }}
       />

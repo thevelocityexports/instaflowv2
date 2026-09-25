@@ -401,11 +401,14 @@ router.get(
       }
 
       if (!targetAccount) {
-        // Automatically ensure account so the user can work immediately
-        targetAccount = await databaseService.upsertInstagramAccount(userId, {
-          username: 'panchalohajewels',
-          name: 'Panchaloha Jewels',
+        res.json({
+          success: true,
+          media: [],
+          hasAccount: false,
+          hasToken: false,
+          message: 'No Instagram account connected yet.',
         });
+        return;
       }
 
       const accountHandle = targetAccount.username || 'panchalohajewels';

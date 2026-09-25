@@ -153,7 +153,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
       }
 
       const res = await ApiClient.getInstagramMedia(connectedAccount?.id);
-      if (res.success && res.media && res.media.length > 0) {
+      if (res && res.success && res.media && res.media.length > 0) {
         setLiveMedia(res.media);
         localStorage.setItem(cacheKey, JSON.stringify(res.media));
         if (!selectedPostId || !res.media.some((m) => m.id === selectedPostId)) {
@@ -161,7 +161,10 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         }
       }
     } catch (err: any) {
-      console.error('Failed to load Instagram media', err);
+      // Gracefully handle if not yet authenticated or network issue
+      if (err?.message && !err.message.includes('Unauthorized')) {
+        console.warn('Could not refresh Instagram media:', err?.message || err);
+      }
     } finally {
       setIsLoadingMedia(false);
     }

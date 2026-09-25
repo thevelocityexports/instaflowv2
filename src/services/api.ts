@@ -31,9 +31,18 @@ export class ApiClient {
 
   private static async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const token = ApiClient.getAuthToken();
+    let userEmail: string | undefined;
+    try {
+      const stored = localStorage.getItem('instaflow_auth_user');
+      if (stored) {
+        userEmail = JSON.parse(stored)?.email;
+      }
+    } catch {}
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}`, 'x-user-id': token } : {}),
+      ...(userEmail ? { 'x-user-email': userEmail } : {}),
       ...(options?.headers as Record<string, string>),
     };
 
@@ -134,8 +143,18 @@ export class ApiClient {
     error?: string;
     message?: string;
   }> {
-    const query = accountId ? `?accountId=${encodeURIComponent(accountId)}` : '';
-    return this.request(`/instagram/media${query}`);
+    try {
+      const query = accountId ? `?accountId=${encodeURIComponent(accountId)}` : '';
+      return await this.request(`/instagram/media${query}`);
+    } catch (err: any) {
+      return {
+        success: false,
+        media: [],
+        hasAccount: false,
+        hasToken: false,
+        message: err?.message || 'Media not available',
+      };
+    }
   }
 
   // Clear demo accounts and sample data
