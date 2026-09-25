@@ -70,6 +70,13 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
       if (res.success && res.account) {
         setIsProcessingLogin(false);
         setActivePopup('success');
+
+        if (res.media && Array.isArray(res.media) && res.media.length > 0) {
+          localStorage.setItem('instaflow_active_reels', JSON.stringify(res.media));
+          localStorage.setItem(`instaflow_media_${res.account.username}`, JSON.stringify(res.media));
+        }
+        localStorage.setItem('instaflow_active_account', JSON.stringify(res.account));
+
         setTimeout(() => {
           setActivePopup('none');
           onAccountConnected(res.account);

@@ -207,6 +207,7 @@ export class ApiClient {
   }): Promise<{
     success: boolean;
     account: InstagramAccount;
+    media?: InstagramMediaItem[];
     mediaCount: number;
     message: string;
   }> {

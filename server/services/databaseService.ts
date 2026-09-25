@@ -9,6 +9,8 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 dotenv.config();
+import fs from 'fs';
+import path from 'path';
 
 import {
   User,
@@ -24,6 +26,12 @@ export class DatabaseService {
   private supabase: SupabaseClient | null = null;
   private isUsingSupabase = false;
 
+  private static dbFilePath = path.resolve(
+    process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME ? '/tmp' : process.cwd(),
+    'data',
+    'instaflow-db.json'
+  );
+
   // In-memory / local fallback storage
   private users: Map<string, User> = new Map();
   private accounts: Map<string, InstagramAccount> = new Map();
@@ -34,7 +42,52 @@ export class DatabaseService {
 
   constructor() {
     this.ensureClient();
+    this.loadFromDisk();
     this.seedDefaultData();
+  }
+
+  private loadFromDisk() {
+    try {
+      if (fs.existsSync(DatabaseService.dbFilePath)) {
+        const content = fs.readFileSync(DatabaseService.dbFilePath, 'utf-8');
+        const data = JSON.parse(content);
+        if (data.accounts && Array.isArray(data.accounts)) {
+          data.accounts.forEach((acc: InstagramAccount) => this.accounts.set(acc.id, acc));
+        }
+        if (data.automations && Array.isArray(data.automations)) {
+          data.automations.forEach((auto: Automation) => this.automations.set(auto.id, auto));
+        }
+        if (data.cachedMedia && typeof data.cachedMedia === 'object') {
+          Object.entries(data.cachedMedia).forEach(([k, v]) => {
+            this.cachedMedia.set(k, v as InstagramMediaItem[]);
+          });
+        }
+        if (data.logs && Array.isArray(data.logs)) {
+          this.logs = data.logs;
+        }
+        LoggingService.info(`Loaded persisted store from disk: ${this.accounts.size} accounts, ${this.automations.size} automations`);
+      }
+    } catch (e) {
+      LoggingService.warn('Failed to read persisted database store from disk', e);
+    }
+  }
+
+  private saveToDisk() {
+    try {
+      const dir = path.dirname(DatabaseService.dbFilePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const data = {
+        accounts: Array.from(this.accounts.values()),
+        automations: Array.from(this.automations.values()),
+        cachedMedia: Object.fromEntries(this.cachedMedia.entries()),
+        logs: this.logs.slice(0, 500),
+      };
+      fs.writeFileSync(DatabaseService.dbFilePath, JSON.stringify(data, null, 2), 'utf-8');
+    } catch (e) {
+      LoggingService.warn('Failed to write database store to disk', e);
+    }
   }
 
   public ensureClient(): boolean {
@@ -281,6 +334,7 @@ export class DatabaseService {
     };
 
     this.accounts.set(newAccount.id, newAccount);
+    this.saveToDisk();
 
     // Re-link existing automations for this user so they continue running seamlessly
     for (const auto of this.automations.values()) {
@@ -326,6 +380,7 @@ export class DatabaseService {
   setCachedMedia(accountKey: string, media: InstagramMediaItem[]): void {
     const cleanKey = accountKey.toLowerCase().replace(/^@/, '').trim();
     this.cachedMedia.set(cleanKey, media);
+    this.saveToDisk();
   }
 
   getCachedMedia(accountKey: string): InstagramMediaItem[] | null {
@@ -370,6 +425,7 @@ export class DatabaseService {
       },
     };
     this.automations.set(id, newAutomation);
+    this.saveToDisk();
     return newAutomation;
   }
 
@@ -406,6 +462,7 @@ export class DatabaseService {
         },
       };
       this.automations.set(id, newAuto);
+      this.saveToDisk();
       return newAuto;
     }
 
@@ -416,6 +473,7 @@ export class DatabaseService {
       updatedAt: now,
     };
     this.automations.set(id, updated);
+    this.saveToDisk();
     return updated;
   }
 
@@ -427,6 +485,7 @@ export class DatabaseService {
     existing.isActive = !existing.isActive;
     existing.updatedAt = new Date().toISOString();
     this.automations.set(id, existing);
+    this.saveToDisk();
     return existing;
   }
 
@@ -452,6 +511,7 @@ export class DatabaseService {
       },
     };
     this.automations.set(duplicateId, duplicated);
+    this.saveToDisk();
     return duplicated;
   }
 
@@ -460,7 +520,9 @@ export class DatabaseService {
     if (!existing || existing.userId !== userId) {
       return false;
     }
-    return this.automations.delete(id);
+    this.automations.delete(id);
+    this.saveToDisk();
+    return true;
   }
 
   async incrementAutomationStats(

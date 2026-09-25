@@ -69,8 +69,17 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     initialData?.name || 'Auto-DM links from comments'
   );
 
-  // Live Media State
-  const [liveMedia, setLiveMedia] = useState<InstagramMediaItem[]>([]);
+  // Live Media State (starts from cached synced reels so it never flickers or resets)
+  const [liveMedia, setLiveMedia] = useState<InstagramMediaItem[]>(() => {
+    try {
+      const active = localStorage.getItem('instaflow_active_reels') || localStorage.getItem(`instaflow_media_${activeUsername}`);
+      if (active) {
+        const parsed = JSON.parse(active);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  });
   const [isLoadingMedia, setIsLoadingMedia] = useState(false);
   const [showAllModal, setShowAllModal] = useState(false);
   const [searchReelTerm, setSearchReelTerm] = useState('');
@@ -163,15 +172,28 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   }, [connectedAccount?.id, activeUsername]);
 
   const selectedItem =
-    liveMedia.find((m) => m.id === selectedPostId) || liveMedia[0] || null;
+    liveMedia.find((m) => m.id === selectedPostId) ||
+    (initialData?.targetPostThumbnail
+      ? {
+          id: initialData.targetPostId || 'selected_reel',
+          caption: initialData.targetPostCaption || '',
+          mediaType: 'IMAGE' as const,
+          isReel: true,
+          thumbnailUrl: initialData.targetPostThumbnail,
+          mediaUrl: initialData.targetPostThumbnail,
+          permalink: initialData.targetPostUrl,
+        }
+      : liveMedia[0] || null);
 
   const displayThumbnail =
+    (selectedPostId && initialData?.targetPostId && selectedPostId === initialData.targetPostId && initialData.targetPostThumbnail) ||
     selectedItem?.thumbnailUrl ||
     selectedItem?.mediaUrl ||
     initialData?.targetPostThumbnail ||
     'https://images.unsplash.com/photo-1611591475879-114c004d80a1?auto=format&fit=crop&w=600&q=80';
 
   const displayCaption =
+    (selectedPostId && initialData?.targetPostId && selectedPostId === initialData.targetPostId && initialData.targetPostCaption) ||
     selectedItem?.caption ||
     initialData?.targetPostCaption ||
     `${activeUsername} ✨ THIS FESTIVAL SEASON, CELEBRATE WITH TIMELESS TRADITION! ✨ Celebrate every special occasion with the elegance of a beautiful Mangalsutra & Panchaloha collection. 💛 A symbol of tradition, love and timeless beauty. 📞 96420 64207`;
