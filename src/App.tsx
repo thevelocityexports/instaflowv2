@@ -7,6 +7,7 @@ import { Automations } from './pages/Automations';
 import { Comments } from './pages/Comments';
 import { InstagramConnection } from './pages/InstagramConnection';
 import { Settings } from './pages/Settings';
+import { AuthPage } from './pages/AuthPage';
 import { ManychatOnboardingFlow } from './components/ManychatOnboardingFlow';
 import { ApiClient } from './services/api';
 import {
@@ -21,7 +22,14 @@ import { Users, Bot, MessageCircle, Sparkles, Plus } from 'lucide-react';
 export default function App() {
   // Default to 'automations' to match the user's screenshot directly!
   const [activeTab, setActiveTab] = useState<NavTab>('automations');
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const stored = localStorage.getItem('instaflow_auth_user');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return null;
+  });
+  const [isCheckingAuth, setIsCheckingAuth] = useState(!currentUser);
   const [connectedAccount, setConnectedAccount] = useState<InstagramAccount | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentActivity, setRecentActivity] = useState<ExecutionLog[]>([]);
@@ -54,7 +62,9 @@ export default function App() {
         ApiClient.getComments(),
       ]);
 
-      if (userRes.status === 'fulfilled') setCurrentUser(userRes.value.user);
+      if (userRes.status === 'fulfilled' && userRes.value.user) {
+        setCurrentUser(userRes.value.user);
+      }
       if (accsRes.status === 'fulfilled' && accsRes.value.accounts.length > 0) {
         // Select active connected account first, otherwise first available
         const activeAcc = accsRes.value.accounts.find((a) => a.isConnected) || accsRes.value.accounts[0];
@@ -75,6 +85,7 @@ export default function App() {
       console.error('Failed to load application state', err);
     } finally {
       setIsLoading(false);
+      setIsCheckingAuth(false);
     }
   }, [editingAutomation]);
 
@@ -188,6 +199,27 @@ export default function App() {
     }
   };
 
+  const handleSignOut = async () => {
+    await ApiClient.signOut();
+    setCurrentUser(null);
+    setConnectedAccount(null);
+    setAutomations([]);
+    setRecentActivity([]);
+    showToast('Signed out successfully.');
+  };
+
+  // If user is not authenticated, show modern Sign In / Sign Up page
+  if (!currentUser && !isCheckingAuth) {
+    return (
+      <AuthPage
+        onAuthSuccess={(user) => {
+          setCurrentUser(user);
+          loadData();
+        }}
+      />
+    );
+  }
+
   return (
     <div className="flex h-screen bg-white overflow-hidden font-sans text-slate-900 antialiased select-none">
       {/* Toast notification */}
@@ -208,8 +240,10 @@ export default function App() {
           }
         }}
         connectedAccount={connectedAccount}
+        currentUser={currentUser}
         onOpenTestModal={() => setIsTestModalOpen(true)}
         onDisconnectAccount={handleDisconnectInstagram}
+        onSignOut={handleSignOut}
       />
 
       {/* Main Content Area */}

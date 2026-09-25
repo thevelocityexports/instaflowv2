@@ -51,6 +51,9 @@ export class DatabaseService {
       if (fs.existsSync(DatabaseService.dbFilePath)) {
         const content = fs.readFileSync(DatabaseService.dbFilePath, 'utf-8');
         const data = JSON.parse(content);
+        if (data.users && Array.isArray(data.users)) {
+          data.users.forEach((u: User) => this.users.set(u.id, u));
+        }
         if (data.accounts && Array.isArray(data.accounts)) {
           data.accounts.forEach((acc: InstagramAccount) => this.accounts.set(acc.id, acc));
         }
@@ -65,7 +68,7 @@ export class DatabaseService {
         if (data.logs && Array.isArray(data.logs)) {
           this.logs = data.logs;
         }
-        LoggingService.info(`Loaded persisted store from disk: ${this.accounts.size} accounts, ${this.automations.size} automations`);
+        LoggingService.info(`Loaded persisted store from disk: ${this.users.size} users, ${this.accounts.size} accounts, ${this.automations.size} automations`);
       }
     } catch (e) {
       LoggingService.warn('Failed to read persisted database store from disk', e);
@@ -79,6 +82,7 @@ export class DatabaseService {
         fs.mkdirSync(dir, { recursive: true });
       }
       const data = {
+        users: Array.from(this.users.values()),
         accounts: Array.from(this.accounts.values()),
         automations: Array.from(this.automations.values()),
         cachedMedia: Object.fromEntries(this.cachedMedia.entries()),
@@ -223,10 +227,14 @@ export class DatabaseService {
 
   // User queries
   async getUser(id: string): Promise<User | null> {
-    return this.users.get(id) || Array.from(this.users.values())[0] || null;
+    if (!id) return null;
+    const direct = this.users.get(id);
+    if (direct) return direct;
+    return this.getUserByEmail(id);
   }
 
   async getUserByEmail(email: string): Promise<User | null> {
+    if (!email) return null;
     for (const user of this.users.values()) {
       if (user.email.toLowerCase() === email.toLowerCase()) {
         return user;
@@ -237,6 +245,7 @@ export class DatabaseService {
 
   async saveUser(user: User): Promise<User> {
     this.users.set(user.id, user);
+    this.saveToDisk();
     return user;
   }
 

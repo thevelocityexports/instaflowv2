@@ -8,7 +8,7 @@ import {
   Settings,
   ChevronDown,
   ChevronRight,
-  User,
+  User as UserIcon,
   HelpCircle,
   PanelLeftClose,
   Sparkles,
@@ -18,7 +18,7 @@ import {
   LogOut,
   Check,
 } from 'lucide-react';
-import { InstagramAccount } from '../../shared/types';
+import { InstagramAccount, User } from '../../shared/types';
 
 export type NavTab = 'home' | 'contacts' | 'automations' | 'ai' | 'inbox' | 'instagram' | 'settings';
 
@@ -26,16 +26,20 @@ interface SidebarProps {
   activeTab: NavTab;
   setActiveTab: (tab: NavTab) => void;
   connectedAccount: InstagramAccount | null;
+  currentUser?: User | null;
   onOpenTestModal: () => void;
   onDisconnectAccount?: () => void;
+  onSignOut?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   setActiveTab,
   connectedAccount,
+  currentUser,
   onOpenTestModal,
   onDisconnectAccount,
+  onSignOut,
 }) => {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
 
@@ -217,6 +221,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Bottom Footer Items */}
       <div className="p-3 border-t border-slate-100 space-y-1 text-slate-600 text-[13px]">
+        {currentUser && (
+          <div className="p-2 mb-1 bg-slate-50 border border-slate-200/70 rounded-xl flex items-center justify-between">
+            <div className="min-w-0 flex-1 pr-2">
+              <span className="text-[11px] font-bold text-slate-800 truncate block">
+                {currentUser.fullName || currentUser.email.split('@')[0]}
+              </span>
+              <span className="text-[10px] text-slate-400 truncate block">
+                {currentUser.email}
+              </span>
+            </div>
+            {onSignOut && (
+              <button
+                onClick={onSignOut}
+                title="Log out"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        )}
+
         <button
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 text-slate-500 hover:text-slate-800 transition-colors"
           title="Collapse sidebar"
@@ -228,7 +254,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onClick={() => setActiveTab('instagram')}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
         >
-          <User className="w-4 h-4 text-slate-500" />
+          <UserIcon className="w-4 h-4 text-slate-500" />
           <span>My Profile</span>
         </button>
 

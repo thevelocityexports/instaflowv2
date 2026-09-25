@@ -16,13 +16,30 @@ import {
 const API_BASE = ((import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') || '') + '/api';
 
 export class ApiClient {
+  static getAuthToken(): string | null {
+    return localStorage.getItem('instaflow_auth_token');
+  }
+
+  static setAuthToken(token: string | null): void {
+    if (token) {
+      localStorage.setItem('instaflow_auth_token', token);
+    } else {
+      localStorage.removeItem('instaflow_auth_token');
+      localStorage.removeItem('instaflow_auth_user');
+    }
+  }
+
   private static async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+    const token = ApiClient.getAuthToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}`, 'x-user-id': token } : {}),
+      ...(options?.headers as Record<string, string>),
+    };
+
     const res = await fetch(`${API_BASE}${endpoint}`, {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
+      headers,
     });
 
     if (!res.ok) {
@@ -298,7 +315,47 @@ export class ApiClient {
   }
 
   // Auth
-  static async getCurrentUser(): Promise<{ user: User }> {
+  static async getCurrentUser(): Promise<{ user: User; isAuthenticated: boolean }> {
     return this.request('/auth/me');
+  }
+
+  static async signUp(data: {
+    email: string;
+    password: string;
+    fullName?: string;
+    companyName?: string;
+  }): Promise<{ success: boolean; user: User; token: string; message: string }> {
+    const res = await this.request<{ success: boolean; user: User; token: string; message: string }>('/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (res.token) {
+      this.setAuthToken(res.token);
+      localStorage.setItem('instaflow_auth_user', JSON.stringify(res.user));
+    }
+    return res;
+  }
+
+  static async signIn(data: {
+    email: string;
+    password: string;
+  }): Promise<{ success: boolean; user: User; token: string; message: string }> {
+    const res = await this.request<{ success: boolean; user: User; token: string; message: string }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (res.token) {
+      this.setAuthToken(res.token);
+      localStorage.setItem('instaflow_auth_user', JSON.stringify(res.user));
+    }
+    return res;
+  }
+
+  static async signOut(): Promise<{ success: boolean }> {
+    try {
+      await this.request('/auth/logout', { method: 'POST' });
+    } catch {}
+    this.setAuthToken(null);
+    return { success: true };
   }
 }

@@ -19,6 +19,8 @@ export interface User {
   email: string;
   fullName: string;
   avatarUrl?: string;
+  companyName?: string;
+  password?: string;
   createdAt: string;
 }
 

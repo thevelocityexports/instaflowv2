@@ -19,22 +19,28 @@ export class AuthService {
    */
   static async resolveUser(req: Request): Promise<User | null> {
     const authHeader = req.headers.authorization;
+    const customUserId = req.headers['x-user-id'] as string | undefined;
 
     if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
+      const token = authHeader.substring(7).trim();
       if (token && token !== 'undefined' && token !== 'null') {
-        // If real Supabase JWT provided, decode/verify user
         try {
-          // Check for user ID in token or lookup in database
-          const user = await databaseService.getUser(token);
+          const user = (await databaseService.getUser(token)) || (await databaseService.getUserByEmail(token));
           if (user) return user;
         } catch (err) {
-          LoggingService.warn('Could not resolve user from token', err);
+          LoggingService.warn('Could not resolve user from bearer token', err);
         }
       }
     }
 
-    // Default development session user for seamless local development
+    if (customUserId && customUserId !== 'undefined' && customUserId !== 'null') {
+      try {
+        const user = await databaseService.getUser(customUserId);
+        if (user) return user;
+      } catch (err) {}
+    }
+
+    // Default fallback
     return databaseService.getUser('usr_default_01');
   }
 
