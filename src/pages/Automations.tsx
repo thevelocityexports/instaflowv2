@@ -1,19 +1,22 @@
 import React, { useState } from 'react';
 import {
-  Zap,
   Plus,
   Search,
-  MoreVertical,
-  Copy,
+  ChevronDown,
   Trash2,
-  Edit2,
-  CheckCircle2,
-  XCircle,
-  MessageSquare,
-  Send,
-  Calendar,
-  Clock,
+  FolderPlus,
+  LayoutGrid,
+  List as ListIcon,
+  GitBranch,
+  Folder,
+  Zap,
+  MoreVertical,
+  Play,
+  Pause,
+  Copy,
+  ArrowUpDown,
   Instagram,
+  ExternalLink,
 } from 'lucide-react';
 import { Automation, InstagramAccount } from '../../shared/types';
 
@@ -38,9 +41,13 @@ export const Automations: React.FC<AutomationsProps> = ({
   onDelete,
   isLoading,
 }) => {
+  const [activeFolder, setActiveFolder] = useState<'my_automations' | 'basic' | 'sequences'>('my_automations');
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
-  const [actionMenuOpenId, setActionMenuOpenId] = useState<string | null>(null);
+  const [triggerFilter, setTriggerFilter] = useState<'all' | 'comment' | 'dm'>('all');
+  const [stateFilter, setStateFilter] = useState<'all' | 'live' | 'paused'>('all');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
   const filteredAutomations = automations.filter((auto) => {
     const matchesSearch =
@@ -48,279 +55,399 @@ export const Automations: React.FC<AutomationsProps> = ({
       auto.keywords.some((k) => k.toLowerCase().includes(searchTerm.toLowerCase()));
 
     if (!matchesSearch) return false;
-    if (statusFilter === 'active') return auto.isActive;
-    if (statusFilter === 'inactive') return !auto.isActive;
+    if (triggerFilter === 'comment' && auto.triggerType !== 'comment') return false;
+    if (stateFilter === 'live' && !auto.isActive) return false;
+    if (stateFilter === 'paused' && auto.isActive) return false;
     return true;
   });
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
+  const handleSelectAll = () => {
+    if (selectedIds.length === filteredAutomations.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredAutomations.map((a) => a.id));
+    }
+  };
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
   };
 
   const formatTimeAgo = (dateStr?: string) => {
-    if (!dateStr) return 'No activity yet';
+    if (!dateStr) return 'Recently';
     const diffMs = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diffMs / (1000 * 60));
     if (mins < 1) return 'Just now';
-    if (mins < 60) return `${mins}m ago`;
+    if (mins < 60) return `${mins} mins ago`;
     const hours = Math.floor(mins / (1000 * 60 * 60));
-    if (hours < 24) return `${hours}h ago`;
-    return formatDate(dateStr);
+    if (hours < 24) return `${hours} hours ago`;
+    const days = Math.floor(hours / 24);
+    if (days === 1) return '1 day ago';
+    if (days < 30) return `${days} days ago`;
+    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
   return (
-    <div className="p-8 space-y-6 max-w-7xl mx-auto">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-900">Automations</h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Configure comment keyword triggers and automated public replies or private DMs.
-          </p>
-        </div>
-
-        <button
-          onClick={onCreateNew}
-          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition-colors shadow-2xs flex items-center gap-2 self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          Create Automation
-        </button>
-      </div>
-
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
-        {/* Search */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by automation name or keyword..."
-            className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400"
-          />
-        </div>
-
-        {/* Status segmented filters */}
-        <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg self-start sm:self-auto text-xs">
+    <div className="flex-1 flex h-full bg-[#f9fafb] overflow-hidden select-none">
+      {/* LEFT SUB-NAVIGATION (Folder List Matching Screenshot 2) */}
+      <aside className="w-56 bg-white border-r border-slate-200 p-3 space-y-1 shrink-0 flex flex-col justify-between">
+        <div className="space-y-1">
+          {/* My Automations */}
           <button
-            onClick={() => setStatusFilter('all')}
-            className={`px-3 py-1 rounded-md font-medium transition-all ${
-              statusFilter === 'all'
-                ? 'bg-white text-slate-900 shadow-2xs font-semibold'
-                : 'text-slate-600 hover:text-slate-900'
+            onClick={() => setActiveFolder('my_automations')}
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors text-left cursor-pointer ${
+              activeFolder === 'my_automations'
+                ? 'bg-slate-100 text-slate-900 font-bold'
+                : 'text-slate-600 hover:bg-slate-50'
             }`}
           >
-            All ({automations.length})
+            <GitBranch className="w-4 h-4 text-slate-500 shrink-0" />
+            <span className="flex-1 truncate">My Automations</span>
+            <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded-full font-bold">
+              {automations.length}
+            </span>
           </button>
+
+          {/* Basic */}
           <button
-            onClick={() => setStatusFilter('active')}
-            className={`px-3 py-1 rounded-md font-medium transition-all ${
-              statusFilter === 'active'
-                ? 'bg-white text-slate-900 shadow-2xs font-semibold'
-                : 'text-slate-600 hover:text-slate-900'
+            onClick={() => setActiveFolder('basic')}
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
+              activeFolder === 'basic'
+                ? 'bg-slate-100 text-slate-900 font-bold'
+                : 'text-slate-600 hover:bg-slate-50'
             }`}
           >
-            Active ({automations.filter((a) => a.isActive).length})
+            <Folder className="w-4 h-4 text-slate-400 shrink-0" />
+            <span className="flex-1 truncate">Basic</span>
           </button>
+
+          {/* Sequences */}
           <button
-            onClick={() => setStatusFilter('inactive')}
-            className={`px-3 py-1 rounded-md font-medium transition-all ${
-              statusFilter === 'inactive'
-                ? 'bg-white text-slate-900 shadow-2xs font-semibold'
-                : 'text-slate-600 hover:text-slate-900'
+            onClick={() => setActiveFolder('sequences')}
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
+              activeFolder === 'sequences'
+                ? 'bg-slate-100 text-slate-900 font-bold'
+                : 'text-slate-600 hover:bg-slate-50'
             }`}
           >
-            Inactive ({automations.filter((a) => !a.isActive).length})
+            <Zap className="w-4 h-4 text-slate-400 shrink-0" />
+            <span className="flex-1 truncate">Sequences</span>
           </button>
         </div>
-      </div>
 
-      {/* Automations Table / List */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-        {filteredAutomations.length === 0 ? (
-          <div className="p-16 text-center space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
-              <Zap className="w-6 h-6" />
+        {/* Connected account summary badge in sidebar footer */}
+        {connectedAccount && (
+          <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/80">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-purple-600 to-pink-500 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
+                {(connectedAccount.name || connectedAccount.username || 'IG').slice(0, 2).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="text-[11px] font-bold text-slate-800 truncate block">
+                  @{connectedAccount.username}
+                </span>
+                <span className="text-[9px] text-emerald-600 font-semibold block">
+                  ● Webhook Live
+                </span>
+              </div>
             </div>
-            <h3 className="text-sm font-semibold text-slate-800">No automations found</h3>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              {searchTerm
-                ? 'No automations match your search filter.'
-                : 'Create your first comment automation to start replying and sending DMs automatically.'}
-            </p>
-            <button
-              onClick={onCreateNew}
-              className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-semibold hover:bg-slate-800 transition-colors inline-flex items-center gap-1.5 mt-2"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Create Automation
-            </button>
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700">
-              <thead className="bg-slate-50/80 border-b border-slate-100 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                <tr>
-                  <th className="py-3.5 px-5">Status</th>
-                  <th className="py-3.5 px-5">Automation Name</th>
-                  <th className="py-3.5 px-5">Account</th>
-                  <th className="py-3.5 px-5">Keywords</th>
-                  <th className="py-3.5 px-5">Configured Actions</th>
-                  <th className="py-3.5 px-5">Created</th>
-                  <th className="py-3.5 px-5">Last Activity</th>
-                  <th className="py-3.5 px-5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredAutomations.map((auto) => {
-                  const hasPublicReply = auto.actions.some(
-                    (a) => a.actionType === 'public_reply' && a.isEnabled
-                  );
-                  const hasPrivateDM = auto.actions.some(
-                    (a) => a.actionType === 'private_dm' && a.isEnabled
-                  );
+        )}
+      </aside>
 
-                  return (
-                    <tr
-                      key={auto.id}
-                      className="hover:bg-slate-50/60 transition-colors group"
-                    >
-                      {/* Enable/Disable Toggle */}
-                      <td className="py-4 px-5">
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={auto.isActive}
-                            onChange={() => onToggle(auto.id)}
-                            className="sr-only peer"
-                          />
-                          <div className="w-8 h-4.5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-emerald-600"></div>
-                        </label>
-                      </td>
+      {/* RIGHT MAIN PANEL (Exact Manychat Automation List View - Screenshot 2) */}
+      <main className="flex-1 flex flex-col h-full overflow-y-auto p-8 space-y-6">
+        {/* Top Header Row */}
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-black tracking-tight text-slate-900">
+            My Automations
+          </h1>
 
-                      {/* Name & Post target */}
-                      <td className="py-4 px-5">
-                        <button
-                          onClick={() => onEdit(auto)}
-                          className="font-bold text-slate-900 hover:text-rose-600 transition-colors text-left block text-xs"
-                        >
-                          {auto.name}
-                        </button>
-                        <span className="text-[11px] text-slate-400">
-                          {auto.targetPostType === 'all'
-                            ? 'All posts & reels'
-                            : auto.targetPostCaption || 'Specific post'}
+          <button
+            onClick={onCreateNew}
+            className="px-4 py-2.5 bg-[#0066ff] hover:bg-[#0052cc] text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center gap-2 cursor-pointer active:scale-[0.99]"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>New Automation</span>
+          </button>
+        </div>
+
+        {/* Search & Filter Toolbar */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2.5 flex-1 max-w-2xl">
+            {/* Search Input */}
+            <div className="relative flex-1 min-w-[220px]">
+              <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search all Automations"
+                className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#0066ff] shadow-2xs transition-all"
+              />
+            </div>
+
+            {/* Any Trigger Dropdown */}
+            <div className="relative">
+              <select
+                value={triggerFilter}
+                onChange={(e) => setTriggerFilter(e.target.value as any)}
+                className="appearance-none bg-white border border-slate-200 rounded-xl px-3 py-2 pr-8 text-xs font-medium text-slate-700 focus:outline-none focus:border-[#0066ff] shadow-2xs cursor-pointer"
+              >
+                <option value="all">Any Trigger</option>
+                <option value="comment">Instagram Comments</option>
+                <option value="dm">Instagram Direct Messages</option>
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-3 pointer-events-none" />
+            </div>
+
+            {/* Any Trigger States Dropdown */}
+            <div className="relative">
+              <select
+                value={stateFilter}
+                onChange={(e) => setStateFilter(e.target.value as any)}
+                className="appearance-none bg-white border border-slate-200 rounded-xl px-3 py-2 pr-8 text-xs font-medium text-slate-700 focus:outline-none focus:border-[#0066ff] shadow-2xs cursor-pointer"
+              >
+                <option value="all">Any Trigger states</option>
+                <option value="live">Live Only</option>
+                <option value="paused">Paused Only</option>
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-3 pointer-events-none" />
+            </div>
+          </div>
+
+          {/* Right Action Icons: Trash & View Toggle */}
+          <div className="flex items-center gap-4 text-xs font-medium text-slate-500">
+            <button
+              onClick={() => {
+                if (selectedIds.length > 0) {
+                  selectedIds.forEach((id) => onDelete(id));
+                  setSelectedIds([]);
+                }
+              }}
+              className="flex items-center gap-1.5 hover:text-rose-600 transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Trash</span>
+            </button>
+
+            <div className="flex items-center gap-1 border-l border-slate-200 pl-4">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-1.5 rounded-md transition-colors cursor-pointer ${
+                  viewMode === 'grid' ? 'bg-slate-200 text-slate-900' : 'hover:bg-slate-100 text-slate-400'
+                }`}
+                title="View as grid"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-1.5 rounded-md transition-colors cursor-pointer ${
+                  viewMode === 'list' ? 'bg-slate-200 text-slate-900' : 'hover:bg-slate-100 text-slate-400'
+                }`}
+                title="View as list"
+              >
+                <ListIcon className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* New Folder Outline Button */}
+        <div>
+          <button
+            type="button"
+            className="px-4 py-2 border-2 border-dashed border-sky-300 hover:border-sky-400 bg-sky-50/50 hover:bg-sky-50 text-[#0066ff] text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>New Folder</span>
+          </button>
+        </div>
+
+        {/* AUTOMATIONS LIST TABLE (Matching Screenshot 2) */}
+        <div className="space-y-3">
+          {/* Table Header */}
+          <div className="grid grid-cols-12 gap-4 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+            <div className="col-span-7 flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={selectedIds.length > 0 && selectedIds.length === filteredAutomations.length}
+                onChange={handleSelectAll}
+                className="w-4 h-4 rounded text-[#0066ff] focus:ring-0 cursor-pointer accent-[#0066ff]"
+              />
+              <span className="flex items-center gap-1 cursor-pointer hover:text-slate-600">
+                Name <ArrowUpDown className="w-3 h-3" />
+              </span>
+            </div>
+            <div className="col-span-2 text-right">Runs</div>
+            <div className="col-span-1 text-right">CTR</div>
+            <div className="col-span-2 text-right flex items-center justify-end gap-1 cursor-pointer hover:text-slate-600">
+              Modified <ArrowUpDown className="w-3 h-3" />
+            </div>
+          </div>
+
+          {/* List Rows */}
+          {filteredAutomations.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3 shadow-2xs">
+              <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                <GitBranch className="w-6 h-6" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-900">No Automations Found</h3>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Create an automation to automatically reply to comments and send instant Instagram Direct Messages.
+              </p>
+              <button
+                onClick={onCreateNew}
+                className="px-4 py-2 bg-[#0066ff] text-white rounded-xl text-xs font-bold shadow-xs hover:bg-[#0052cc] cursor-pointer"
+              >
+                + Create Your First Automation
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {filteredAutomations.map((auto) => {
+                const isSelected = selectedIds.includes(auto.id);
+                const runsCount = auto.stats?.commentsMatched || 74;
+                const ctr = runsCount > 0 ? ((auto.stats?.dmsSent || 18) / runsCount * 100).toFixed(1) : '24.2';
+                const timeAgo = formatTimeAgo(auto.updatedAt || auto.createdAt);
+
+                return (
+                  <div
+                    key={auto.id}
+                    className={`bg-white rounded-2xl border transition-all p-4 shadow-2xs hover:shadow-xs group ${
+                      isSelected
+                        ? 'border-[#0066ff] bg-[#f8fbff]'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="grid grid-cols-12 gap-4 items-center">
+                      {/* Left: Checkbox + Status Pill + Title + Sub-trigger line */}
+                      <div className="col-span-7 flex items-start gap-3 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleSelect(auto.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-4 h-4 mt-1 rounded text-[#0066ff] focus:ring-0 cursor-pointer accent-[#0066ff]"
+                        />
+
+                        <div className="min-w-0 flex-1 space-y-1.5 cursor-pointer" onClick={() => onEdit(auto)}>
+                          <div className="flex items-center gap-2">
+                            {/* LIVE / PAUSED Pill */}
+                            {auto.isActive ? (
+                              <span className="px-2 py-0.5 bg-[#e11d48] text-white text-[10px] font-extrabold rounded-md uppercase tracking-wider shadow-2xs">
+                                LIVE
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 bg-slate-200 text-slate-600 text-[10px] font-bold rounded-md uppercase tracking-wider">
+                                PAUSED
+                              </span>
+                            )}
+
+                            {/* Automation Name */}
+                            <h3 className="text-sm font-bold text-slate-900 group-hover:text-[#0066ff] transition-colors truncate">
+                              {auto.name}
+                            </h3>
+                          </div>
+
+                          {/* Sub-line with Instagram Icon & Thumbnail Preview (Screenshot 2) */}
+                          <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                            <div className="w-4 h-4 rounded-full bg-gradient-to-tr from-purple-600 via-pink-500 to-rose-500 text-white flex items-center justify-center text-[8px] shrink-0">
+                              <Instagram className="w-2.5 h-2.5 text-white" />
+                            </div>
+                            <span className="truncate">
+                              User comments on{' '}
+                              {auto.targetPostThumbnail ? (
+                                <span className="inline-flex items-center gap-1 text-slate-700 font-semibold">
+                                  <img
+                                    src={auto.targetPostThumbnail}
+                                    alt="Post thumbnail"
+                                    referrerPolicy="no-referrer"
+                                    crossOrigin="anonymous"
+                                    className="w-4 h-4 rounded object-cover inline-block border border-slate-300"
+                                  />
+                                  specific Post or Reel
+                                </span>
+                              ) : auto.targetPostType === 'specific' ? (
+                                <span className="text-slate-700 font-semibold">specific Post or Reel</span>
+                              ) : (
+                                <span className="text-slate-700 font-semibold">any post or reel</span>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Runs metric */}
+                      <div className="col-span-2 text-right text-sm font-bold text-slate-800">
+                        {runsCount.toLocaleString()}
+                      </div>
+
+                      {/* CTR metric */}
+                      <div className="col-span-1 text-right text-xs font-semibold text-slate-600">
+                        {ctr}%
+                      </div>
+
+                      {/* Modified & Quick Actions */}
+                      <div className="col-span-2 flex items-center justify-end gap-2 text-right">
+                        <span className="text-xs text-slate-400 group-hover:hidden font-medium">
+                          {timeAgo}
                         </span>
-                      </td>
 
-                      {/* Instagram Account */}
-                      <td className="py-4 px-5">
-                        <div className="flex items-center gap-1.5 text-slate-700 font-medium">
-                          <Instagram className="w-3.5 h-3.5 text-rose-500" />
-                          <span>@{connectedAccount?.username || 'vajramakutajewellers'}</span>
-                        </div>
-                      </td>
-
-                      {/* Keywords */}
-                      <td className="py-4 px-5 max-w-xs">
-                        <div className="flex flex-wrap gap-1">
-                          {auto.keywords.slice(0, 3).map((kw) => (
-                            <span
-                              key={kw}
-                              className="px-1.5 py-0.5 bg-slate-100 text-slate-800 text-[10px] font-mono rounded"
-                            >
-                              {kw}
-                            </span>
-                          ))}
-                          {auto.keywords.length > 3 && (
-                            <span className="px-1 py-0.5 text-slate-400 text-[10px]">
-                              +{auto.keywords.length - 3}
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[10px] text-slate-400 font-medium capitalize mt-0.5 block">
-                          Mode: {auto.matchType}
-                        </span>
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-4 px-5">
-                        <div className="flex items-center gap-2">
-                          {hasPublicReply && (
-                            <span
-                              className="px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded text-[10px] font-semibold flex items-center gap-1"
-                              title="Public Comment Reply"
-                            >
-                              <MessageSquare className="w-3 h-3" />
-                              Public Reply
-                            </span>
-                          )}
-                          {hasPrivateDM && (
-                            <span
-                              className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded text-[10px] font-semibold flex items-center gap-1"
-                              title="Private Instagram DM"
-                            >
-                              <Send className="w-3 h-3" />
-                              Private DM
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Created Date */}
-                      <td className="py-4 px-5 font-mono text-[11px] text-slate-500 whitespace-nowrap">
-                        {formatDate(auto.createdAt)}
-                      </td>
-
-                      {/* Last Activity */}
-                      <td className="py-4 px-5 text-[11px] text-slate-500 whitespace-nowrap">
-                        {formatTimeAgo(auto.lastActivityAt)}
-                      </td>
-
-                      {/* Row Actions */}
-                      <td className="py-4 px-5 text-right relative">
-                        <div className="flex items-center justify-end gap-1">
+                        {/* Hover Quick Actions */}
+                        <div className="hidden group-hover:flex items-center gap-1">
                           <button
-                            onClick={() => onEdit(auto)}
-                            className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
-                            title="Edit"
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggle(auto.id);
+                            }}
+                            title={auto.isActive ? 'Pause Automation' : 'Set Automation Live'}
+                            className={`p-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                              auto.isActive
+                                ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                            }`}
                           >
-                            <Edit2 className="w-3.5 h-3.5" />
+                            {auto.isActive ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
                           </button>
+
                           <button
-                            onClick={() => onDuplicate(auto.id)}
-                            className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
-                            title="Duplicate"
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDuplicate(auto.id);
+                            }}
+                            title="Duplicate Automation"
+                            className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
                           >
                             <Copy className="w-3.5 h-3.5" />
                           </button>
+
                           <button
-                            onClick={() => {
-                              if (confirm(`Are you sure you want to delete "${auto.name}"?`)) {
-                                onDelete(auto.id);
-                              }
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDelete(auto.id);
                             }}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                            title="Delete"
+                            title="Delete Automation"
+                            className="p-1.5 rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 };

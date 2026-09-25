@@ -128,13 +128,25 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
 
-  // Fetch Media
+  // Fetch Media with LocalStorage Cache
   const fetchLiveMedia = async () => {
     setIsLoadingMedia(true);
     try {
+      const cacheKey = `instaflow_media_${activeUsername}`;
+      const localCached = localStorage.getItem(cacheKey);
+      if (localCached) {
+        try {
+          const parsed = JSON.parse(localCached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setLiveMedia(parsed);
+          }
+        } catch (e) {}
+      }
+
       const res = await ApiClient.getInstagramMedia(connectedAccount?.id);
       if (res.success && res.media && res.media.length > 0) {
         setLiveMedia(res.media);
+        localStorage.setItem(cacheKey, JSON.stringify(res.media));
         if (!selectedPostId || !res.media.some((m) => m.id === selectedPostId)) {
           setSelectedPostId(res.media[0].id);
         }
@@ -148,7 +160,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
   useEffect(() => {
     fetchLiveMedia();
-  }, [connectedAccount?.id]);
+  }, [connectedAccount?.id, activeUsername]);
 
   const selectedItem =
     liveMedia.find((m) => m.id === selectedPostId) || liveMedia[0] || null;
@@ -156,10 +168,12 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const displayThumbnail =
     selectedItem?.thumbnailUrl ||
     selectedItem?.mediaUrl ||
+    initialData?.targetPostThumbnail ||
     'https://images.unsplash.com/photo-1611591475879-114c004d80a1?auto=format&fit=crop&w=600&q=80';
 
   const displayCaption =
     selectedItem?.caption ||
+    initialData?.targetPostCaption ||
     `${activeUsername} ✨ THIS FESTIVAL SEASON, CELEBRATE WITH TIMELESS TRADITION! ✨ Celebrate every special occasion with the elegance of a beautiful Mangalsutra & Panchaloha collection. 💛 A symbol of tradition, love and timeless beauty. 📞 96420 64207`;
 
   const handleSelectReel = (item: InstagramMediaItem) => {
@@ -218,6 +232,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         targetPostType: targetPostType,
         targetPostId: targetPostType === 'specific' ? selectedPostId || selectedItem?.id : undefined,
         targetPostUrl: selectedItem?.permalink,
+        targetPostThumbnail: displayThumbnail,
         targetPostCaption: targetPostType === 'specific' ? displayCaption : undefined,
         matchType: 'contains',
         keywords: hasKeywordMode === 'specific' ? keywords : ['*'],

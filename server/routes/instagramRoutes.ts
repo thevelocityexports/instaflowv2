@@ -312,6 +312,11 @@ router.post(
         profilePictureUrl: syncResult.profile.profilePictureUrl,
       });
 
+      if (syncResult.media && syncResult.media.length > 0) {
+        databaseService.setCachedMedia(account.username, syncResult.media);
+        databaseService.setCachedMedia(account.id, syncResult.media);
+      }
+
       res.status(200).json({
         success: true,
         message: `Connected @${account.username} with Meta Access Token successfully!`,
@@ -405,7 +410,21 @@ router.get(
 
       const accountHandle = targetAccount.username || 'panchalohajewels';
 
-      // 1. If Meta Access Token is configured, attempt live Meta Graph API fetch
+      // 1. Check if cached live media is already in database memory
+      const cached = databaseService.getCachedMedia(accountHandle) || databaseService.getCachedMedia(targetAccount.id);
+      if (cached && cached.length > 0) {
+        res.json({
+          success: true,
+          media: cached,
+          hasAccount: true,
+          hasToken: !!targetAccount.accessToken,
+          account: targetAccount,
+          message: `Retrieved ${cached.length} cached live reels and posts for @${accountHandle}`,
+        });
+        return;
+      }
+
+      // 2. If Meta Access Token is configured, attempt live Meta Graph API fetch
       if (targetAccount.accessToken) {
         const mediaResult = await InstagramService.getAccountMedia({
           instagramUserId: targetAccount.instagramUserId,
@@ -414,6 +433,9 @@ router.get(
         });
 
         if (mediaResult.success && mediaResult.media && mediaResult.media.length > 0) {
+          databaseService.setCachedMedia(accountHandle, mediaResult.media);
+          databaseService.setCachedMedia(targetAccount.id, mediaResult.media);
+
           res.json({
             success: true,
             media: mediaResult.media,

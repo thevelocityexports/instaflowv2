@@ -16,6 +16,7 @@ import {
   Automation,
   ExecutionLog,
   DashboardStats,
+  InstagramMediaItem,
 } from '../../shared/types';
 import { LoggingService } from './loggingService';
 
@@ -29,6 +30,7 @@ export class DatabaseService {
   private automations: Map<string, Automation> = new Map();
   private logs: ExecutionLog[] = [];
   private processedEvents: Set<string> = new Set();
+  private cachedMedia: Map<string, InstagramMediaItem[]> = new Map();
 
   constructor() {
     this.ensureClient();
@@ -318,6 +320,17 @@ export class DatabaseService {
       }
     }
     return false;
+  }
+
+  // Media Cache for Instagram Accounts
+  setCachedMedia(accountKey: string, media: InstagramMediaItem[]): void {
+    const cleanKey = accountKey.toLowerCase().replace(/^@/, '').trim();
+    this.cachedMedia.set(cleanKey, media);
+  }
+
+  getCachedMedia(accountKey: string): InstagramMediaItem[] | null {
+    const cleanKey = accountKey.toLowerCase().replace(/^@/, '').trim();
+    return this.cachedMedia.get(cleanKey) || null;
   }
 
   // Automations

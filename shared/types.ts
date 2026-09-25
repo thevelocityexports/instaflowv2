@@ -69,6 +69,7 @@ export interface Automation {
   targetPostType: PostTargetType;
   targetPostId?: string;
   targetPostUrl?: string;
+  targetPostThumbnail?: string;
   targetPostCaption?: string;
   matchType: KeywordMatchType;
   keywords: string[]; // e.g. ["PRICE", "COST", "HOW MUCH"]

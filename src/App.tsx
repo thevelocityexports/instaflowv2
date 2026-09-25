@@ -204,7 +204,7 @@ export default function App() {
         setActiveTab={(tab) => {
           setActiveTab(tab);
           if (tab === 'automations') {
-            setAutomationsView('builder');
+            setAutomationsView('list');
           }
         }}
         connectedAccount={connectedAccount}
@@ -214,44 +214,32 @@ export default function App() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden bg-white">
-        {/* TAB 1: AUTOMATIONS (The Dot-to-Dot Manychat Builder from Screenshots 1, 2, 3, 4, 5) */}
+        {/* TAB 1: AUTOMATIONS (Manychat "My Automations" List & Builder) */}
         {activeTab === 'automations' && (
           <div className="flex-1 flex flex-col h-full overflow-hidden">
             {automationsView === 'builder' ? (
               <AutomationBuilder
                 initialData={editingAutomation}
-                onSave={handleSaveAutomation}
+                onSave={async (data) => {
+                  await handleSaveAutomation(data);
+                  setAutomationsView('list');
+                }}
                 onCancel={() => setAutomationsView('list')}
                 connectedAccount={connectedAccount}
                 connectedAccountUsername={connectedAccount?.username || 'thevelocityexports'}
                 onNavigateToInstagram={() => setActiveTab('instagram')}
               />
             ) : (
-              <div className="flex-1 overflow-y-auto">
-                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                  <div>
-                    <h2 className="text-xl font-bold text-slate-900">All Automations</h2>
-                    <p className="text-xs text-slate-500">Manage and create comment automation flows</p>
-                  </div>
-                  <button
-                    onClick={handleCreateNew}
-                    className="px-4 py-2 bg-[#0066ff] hover:bg-[#0052cc] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-2xs"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    New Automation
-                  </button>
-                </div>
-                <Automations
-                  automations={automations}
-                  connectedAccount={connectedAccount}
-                  onCreateNew={handleCreateNew}
-                  onEdit={handleEditAutomation}
-                  onToggle={handleToggleAutomation}
-                  onDuplicate={handleDuplicateAutomation}
-                  onDelete={handleDeleteAutomation}
-                  isLoading={isLoading}
-                />
-              </div>
+              <Automations
+                automations={automations}
+                connectedAccount={connectedAccount}
+                onCreateNew={handleCreateNew}
+                onEdit={handleEditAutomation}
+                onToggle={handleToggleAutomation}
+                onDuplicate={handleDuplicateAutomation}
+                onDelete={handleDeleteAutomation}
+                isLoading={isLoading}
+              />
             )}
           </div>
         )}
