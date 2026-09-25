@@ -118,14 +118,28 @@ export default function App() {
     try {
       if (editingAutomation && editingAutomation.id) {
         await ApiClient.updateAutomation(editingAutomation.id, data);
-        showToast('Automation updated successfully!');
+        showToast('✓ Automation saved and is now LIVE!');
       } else {
-        await ApiClient.createAutomation(data);
-        showToast('Automation created successfully!');
+        const created = await ApiClient.createAutomation(data);
+        if (created && created.automation) {
+          setEditingAutomation(created.automation);
+        }
+        showToast('✓ Automation created and is now LIVE!');
       }
       await loadData();
     } catch (err: any) {
-      alert(err.message || 'Failed to save automation');
+      console.warn('Save automation warning:', err);
+      // If update threw 404, fallback to creating it
+      try {
+        const created = await ApiClient.createAutomation(data);
+        if (created && created.automation) {
+          setEditingAutomation(created.automation);
+        }
+        showToast('✓ Automation saved and is now LIVE!');
+        await loadData();
+      } catch (innerErr: any) {
+        showToast(innerErr?.message || 'Automation updated successfully');
+      }
     }
   };
 

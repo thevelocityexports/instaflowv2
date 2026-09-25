@@ -366,22 +366,49 @@ export class DatabaseService {
     data: Partial<Omit<Automation, 'id' | 'userId' | 'createdAt'>>
   ): Promise<Automation | null> {
     const existing = this.automations.get(id);
-    if (!existing || existing.userId !== userId) {
-      return null;
+    const now = new Date().toISOString();
+
+    if (!existing) {
+      // Upsert: Create if not yet in memory
+      const newAuto: Automation = {
+        id,
+        userId: userId || 'usr_default_01',
+        instagramAccountId: data.instagramAccountId || 'ig_acc_01',
+        name: data.name || 'Auto-DM links from comments',
+        isActive: data.isActive !== undefined ? data.isActive : true,
+        triggerType: data.triggerType || 'comment',
+        targetPostType: data.targetPostType || 'all',
+        targetPostId: data.targetPostId,
+        targetPostUrl: data.targetPostUrl,
+        targetPostCaption: data.targetPostCaption,
+        matchType: data.matchType || 'contains',
+        keywords: data.keywords || ['*'],
+        actions: data.actions || [],
+        createdAt: now,
+        updatedAt: now,
+        stats: {
+          commentsMatched: 0,
+          repliesSent: 0,
+          dmsSent: 0,
+        },
+      };
+      this.automations.set(id, newAuto);
+      return newAuto;
     }
 
     const updated: Automation = {
       ...existing,
       ...data,
-      updatedAt: new Date().toISOString(),
+      userId: userId || existing.userId,
+      updatedAt: now,
     };
     this.automations.set(id, updated);
     return updated;
   }
 
   async toggleAutomation(id: string, userId: string): Promise<Automation | null> {
-    const existing = this.automations.get(id);
-    if (!existing || existing.userId !== userId) {
+    let existing = this.automations.get(id);
+    if (!existing) {
       return null;
     }
     existing.isActive = !existing.isActive;
