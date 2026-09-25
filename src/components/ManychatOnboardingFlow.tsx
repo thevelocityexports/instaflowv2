@@ -241,6 +241,45 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
 
         {/* RIGHT COLUMN: Interactive Channel Cards or Connect Screen */}
         <div className="w-full md:w-1/2 p-6 sm:p-12 lg:p-20 flex flex-col justify-center bg-white">
+          {/* CURRENTLY CONNECTED ACCOUNT STATUS CARD (If user already has a linked account) */}
+          {currentConnectedAccount && (
+            <div className="w-full max-w-md mx-auto mb-6 p-4 bg-emerald-50/90 border-2 border-emerald-300 rounded-2xl shadow-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-full bg-[#0a180f] border-2 border-emerald-500 flex items-center justify-center text-xs font-bold text-[#c5a059] shrink-0">
+                    {currentConnectedAccount.username.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <h4 className="text-xs font-extrabold text-slate-900">
+                        @{currentConnectedAccount.username}
+                      </h4>
+                      <span className="px-1.5 py-0.2 bg-emerald-200 text-emerald-900 text-[9px] font-bold rounded">
+                        CONNECTED
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-emerald-800 font-medium">
+                      {currentConnectedAccount.name || 'Instagram Account'} • 4 Reels Synced
+                    </p>
+                  </div>
+                </div>
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              </div>
+
+              <div className="pt-1 flex items-center gap-2">
+                {onBackToApp && (
+                  <button
+                    type="button"
+                    onClick={onBackToApp}
+                    className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors shadow-2xs text-center"
+                  >
+                    Open Automation Builder →
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* SCREEN 1: Social Media Channel Selection Cards (Screenshot 1) */}
           {currentStep === 'select_channel' && (
             <div className="w-full max-w-md mx-auto space-y-4">

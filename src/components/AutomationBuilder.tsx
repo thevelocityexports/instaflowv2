@@ -362,6 +362,15 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                         <img
                           src={item.thumbnailUrl || item.mediaUrl}
                           alt={item.caption || 'Instagram Reel'}
+                          onError={(e) => {
+                            const fallbacks = [
+                              'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=600&q=80',
+                              'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=600&q=80',
+                              'https://images.unsplash.com/photo-1601121141461-9d6647bca1ed?auto=format&fit=crop&w=600&q=80',
+                              'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=600&q=80',
+                            ];
+                            e.currentTarget.src = fallbacks[idx % fallbacks.length];
+                          }}
                           className="w-full h-full object-cover"
                         />
                         {/* Reel Indicator & Overlay Tag */}
@@ -721,6 +730,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     <img
                       src={displayThumbnail}
                       alt="Reel Media"
+                      onError={(e) => {
+                        e.currentTarget.src = 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=600&q=80';
+                      }}
                       className="w-full h-full object-cover"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex flex-col justify-end p-2.5">
