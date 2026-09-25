@@ -1,9 +1,8 @@
 /**
  * Database Service
  * Provides data abstraction for InstaFlow.
- * Uses Supabase Client when SUPABASE_URL and keys are configured in .env,
- * with an integrated in-memory fallback store so the SaaS dashboard and
- * automation engine work immediately in development environments.
+ * Uses Supabase Client when SUPABASE_URL and keys are configured,
+ * with multi-tier disk & in-memory caching for zero-friction resilience.
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -21,6 +20,8 @@ import {
   InstagramMediaItem,
 } from '../../shared/types';
 import { LoggingService } from './loggingService';
+import { toValidUuid } from '../utils/uuid';
+import { WorkspaceService } from './workspaceService';
 
 export class DatabaseService {
   private supabase: SupabaseClient | null = null;
@@ -32,7 +33,7 @@ export class DatabaseService {
     'instaflow-db.json'
   );
 
-  // In-memory / local fallback storage
+  // In-memory / local persistent fallback storage
   private users: Map<string, User> = new Map();
   private accounts: Map<string, InstagramAccount> = new Map();
   private automations: Map<string, Automation> = new Map();
@@ -55,7 +56,9 @@ export class DatabaseService {
           data.users.forEach((u: User) => this.users.set(u.id, u));
         }
         if (data.accounts && Array.isArray(data.accounts)) {
-          data.accounts.forEach((acc: InstagramAccount) => this.accounts.set(acc.id, acc));
+          data.accounts.forEach((acc: InstagramAccount) => {
+            this.accounts.set(acc.id, acc);
+          });
         }
         if (data.automations && Array.isArray(data.automations)) {
           data.automations.forEach((auto: Automation) => this.automations.set(auto.id, auto));
@@ -139,19 +142,20 @@ export class DatabaseService {
   }
 
   private seedDefaultData() {
+    const adminEmail = 'thevelocityexports@gmail.com';
     const defaultUser: User = {
-      id: 'usr_default_01',
-      email: 'thevelocityexports@gmail.com',
+      id: toValidUuid(adminEmail),
+      email: adminEmail,
       fullName: 'Velocity Exports Admin',
       avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
       createdAt: new Date().toISOString(),
     };
     this.users.set(defaultUser.id, defaultUser);
+    this.users.set('usr_default_01', defaultUser);
   }
 
-  public async clearDemoData(userId: string = 'usr_default_01'): Promise<{ success: boolean; clearedCount: number }> {
+  public async clearDemoData(_userId: string = 'usr_default_01'): Promise<{ success: boolean; clearedCount: number }> {
     let cleared = 0;
-    // Clear from in-memory store
     for (const [id, acc] of Array.from(this.accounts.entries())) {
       if (
         acc.username.toLowerCase().includes('vajra') ||
@@ -176,13 +180,12 @@ export class DatabaseService {
     this.logs = this.logs.filter(
       (l) => !l.username?.toLowerCase().includes('priya') && !l.username?.toLowerCase().includes('kiran') && l.instagramAccountId !== 'ig_acc_01'
     );
+    this.saveToDisk();
 
-    // Also clear from Supabase if connected
     if (this.ensureClient() && this.supabase) {
       try {
-        await this.supabase.from('instagram_accounts').delete().or(`username.ilike.%vajra%,name.ilike.%vajra%,id.eq.ig_acc_01`);
-        await this.supabase.from('automations').delete().or(`name.ilike.%bangles%,id.eq.auto_price_01,id.eq.auto_bangles_02`);
-        await this.supabase.from('logs').delete().or(`username.eq.priya_sharma,username.eq.kiran.patel`);
+        await this.supabase.from('instagram_accounts').delete().or(`username.ilike.%vajra%,name.ilike.%vajra%`);
+        await this.supabase.from('automations').delete().or(`name.ilike.%bangles%`);
       } catch (err) {
         LoggingService.warn('Could not delete demo data in Supabase table:', err);
       }
@@ -192,34 +195,40 @@ export class DatabaseService {
 
   // Delete Instagram Account permanently
   async deleteInstagramAccount(userId: string, accountId: string): Promise<boolean> {
-    const acc = this.accounts.get(accountId);
-    if (acc && acc.userId === userId) {
-      this.accounts.delete(accountId);
-      if (this.isUsingSupabase && this.supabase) {
-        try {
-          await this.supabase.from('instagram_accounts').delete().eq('id', accountId).eq('user_id', userId);
-        } catch (e) {
-          LoggingService.error('Failed to delete account from Supabase', e);
-        }
+    const validUserId = toValidUuid(userId);
+    const validAccId = toValidUuid(accountId);
+
+    let found = false;
+    for (const [id, acc] of Array.from(this.accounts.entries())) {
+      if (id === accountId || id === validAccId || acc.id === accountId || acc.id === validAccId) {
+        this.accounts.delete(id);
+        found = true;
       }
-      return true;
     }
-    return false;
+    this.saveToDisk();
+
+    if (this.ensureClient() && this.supabase) {
+      try {
+        await this.supabase.from('instagram_accounts').delete().or(`id.eq.${validAccId},id.eq.${accountId}`);
+      } catch (e) {
+        LoggingService.error('Failed to delete account from Supabase', e);
+      }
+    }
+    return found;
   }
 
   // Idempotency: Check if comment event was already processed
   async isEventProcessed(eventId: string): Promise<boolean> {
-    if (this.isUsingSupabase && this.supabase) {
+    if (this.ensureClient() && this.supabase) {
       try {
         const { data, error } = await this.supabase
           .from('processed_events')
           .select('id')
           .eq('event_id', eventId)
           .maybeSingle();
-        if (error) throw error;
-        return !!data;
+        if (!error && data) return true;
       } catch (err) {
-        LoggingService.error('Supabase query error in isEventProcessed, checking local store', err);
+        LoggingService.warn('Supabase query error in isEventProcessed, checking local store', err);
       }
     }
     return this.processedEvents.has(eventId);
@@ -228,14 +237,14 @@ export class DatabaseService {
   // Idempotency: Mark comment event as processed
   async markEventProcessed(eventId: string, platform = 'instagram'): Promise<void> {
     this.processedEvents.add(eventId);
-    if (this.isUsingSupabase && this.supabase) {
+    if (this.ensureClient() && this.supabase) {
       try {
         await this.supabase.from('processed_events').insert({
           event_id: eventId,
           platform,
         });
       } catch (err) {
-        LoggingService.error('Supabase insert error in markEventProcessed', err);
+        LoggingService.warn('Supabase insert error in markEventProcessed', err);
       }
     }
   }
@@ -243,15 +252,17 @@ export class DatabaseService {
   // User queries
   async getUser(id: string): Promise<User | null> {
     if (!id) return null;
-    const direct = this.users.get(id);
+    const direct = this.users.get(id) || this.users.get(toValidUuid(id));
     if (direct) return direct;
 
-    if (this.isUsingSupabase && this.supabase) {
+    const validId = toValidUuid(id);
+
+    if (this.ensureClient() && this.supabase) {
       try {
         const { data, error } = await this.supabase
           .from('users')
           .select('*')
-          .eq('id', id)
+          .eq('id', validId)
           .maybeSingle();
         if (data && !error) {
           const user: User = {
@@ -278,23 +289,23 @@ export class DatabaseService {
     if (!email) return null;
     const cleanEmail = email.toLowerCase().trim();
     for (const user of this.users.values()) {
-      if (user.email.toLowerCase() === cleanEmail) {
+      if (user.email.toLowerCase().trim() === cleanEmail) {
         return user;
       }
     }
 
-    if (this.isUsingSupabase && this.supabase) {
+    if (this.ensureClient() && this.supabase) {
       try {
         const { data, error } = await this.supabase
           .from('users')
           .select('*')
-          .eq('email', cleanEmail)
+          .ilike('email', cleanEmail)
           .maybeSingle();
         if (data && !error) {
           const user: User = {
             id: data.id,
             email: data.email,
-            fullName: data.full_name || data.fullName || cleanEmail.split('@')[0],
+            fullName: data.full_name || data.fullName || data.email.split('@')[0],
             companyName: data.company_name || data.companyName,
             avatarUrl: data.avatar_url || data.avatarUrl,
             password: data.password,
@@ -312,34 +323,93 @@ export class DatabaseService {
   }
 
   async saveUser(user: User): Promise<User> {
-    this.users.set(user.id, user);
+    const validId = toValidUuid(user.id || user.email);
+    const normalizedUser: User = {
+      ...user,
+      id: validId,
+      email: user.email.toLowerCase().trim(),
+    };
+
+    this.users.set(normalizedUser.id, normalizedUser);
+    if (user.id && user.id !== normalizedUser.id) {
+      this.users.set(user.id, normalizedUser);
+    }
     this.saveToDisk();
 
-    if (this.isUsingSupabase && this.supabase) {
+    if (this.ensureClient() && this.supabase) {
       try {
         await this.supabase.from('users').upsert({
-          id: user.id,
-          email: user.email.toLowerCase(),
-          full_name: user.fullName,
-          company_name: user.companyName,
-          password: user.password,
-          avatar_url: user.avatarUrl,
-          created_at: user.createdAt || new Date().toISOString(),
+          id: normalizedUser.id,
+          email: normalizedUser.email,
+          full_name: normalizedUser.fullName,
+          company_name: normalizedUser.companyName,
+          password: normalizedUser.password,
+          avatar_url: normalizedUser.avatarUrl,
+          created_at: normalizedUser.createdAt || new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
       } catch (err) {
-        LoggingService.warn('Supabase saveUser upsert error (will use local store)', err);
+        LoggingService.warn('Supabase saveUser upsert error', err);
       }
     }
 
-    return user;
+    return normalizedUser;
   }
 
   // Instagram Accounts
   async getInstagramAccounts(userId: string): Promise<InstagramAccount[]> {
-    return Array.from(this.accounts.values())
-      .filter((acc) => acc.userId === userId)
-      .sort((a, b) => (b.isConnected ? 1 : 0) - (a.isConnected ? 1 : 0));
+    const validUserId = toValidUuid(userId);
+    const loadedAccounts: InstagramAccount[] = [];
+
+    // 1. Authoritative query from Supabase
+    if (this.ensureClient() && this.supabase) {
+      try {
+        const { data, error } = await this.supabase
+          .from('instagram_accounts')
+          .select('*')
+          .order('is_connected', { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          data.forEach((row: any) => {
+            const acc: InstagramAccount = {
+              id: row.id,
+              userId: row.user_id || validUserId,
+              instagramUserId: row.instagram_user_id || `ig_${row.username}`,
+              username: row.username,
+              name: row.name || row.display_name || row.username,
+              profilePictureUrl: row.profile_picture_url,
+              accessToken: row.access_token,
+              isConnected: row.is_connected ?? true,
+              connectedAt: row.connected_at || new Date().toISOString(),
+              updatedAt: row.updated_at || new Date().toISOString(),
+            };
+            this.accounts.set(acc.id, acc);
+            loadedAccounts.push(acc);
+          });
+        }
+      } catch (err) {
+        LoggingService.warn('Supabase getInstagramAccounts query error', err);
+      }
+    }
+
+    // 2. Combine with in-memory / disk cache
+    const cachedAccounts = Array.from(this.accounts.values());
+    for (const acc of cachedAccounts) {
+      if (!loadedAccounts.some((a) => a.id === acc.id || a.username.toLowerCase() === acc.username.toLowerCase())) {
+        loadedAccounts.push(acc);
+      }
+    }
+
+    // Filter accounts: return all connected accounts belonging to user or active in workspace
+    const userAccounts = loadedAccounts.filter(
+      (acc) => acc.userId === validUserId || acc.userId === userId || acc.isConnected
+    );
+
+    if (userAccounts.length > 0) {
+      return userAccounts.sort((a, b) => (b.isConnected ? 1 : 0) - (a.isConnected ? 1 : 0));
+    }
+
+    return loadedAccounts.sort((a, b) => (b.isConnected ? 1 : 0) - (a.isConnected ? 1 : 0));
   }
 
   async getConnectedInstagramAccount(userId: string): Promise<InstagramAccount | null> {
@@ -348,11 +418,13 @@ export class DatabaseService {
   }
 
   async getAccountById(accountId: string): Promise<InstagramAccount | null> {
-    return this.accounts.get(accountId) || null;
+    const validId = toValidUuid(accountId);
+    return this.accounts.get(accountId) || this.accounts.get(validId) || null;
   }
 
   async saveInstagramAccount(account: InstagramAccount): Promise<InstagramAccount> {
     this.accounts.set(account.id, account);
+    this.saveToDisk();
     return account;
   }
 
@@ -368,107 +440,100 @@ export class DatabaseService {
   ): Promise<InstagramAccount> {
     const cleanUsername = data.username.replace(/^@/, '').trim();
     const instagramUserId = data.instagramUserId?.trim() || `ig_${cleanUsername.toLowerCase()}`;
+    const validUserId = toValidUuid(userId);
+    const validAccountId = toValidUuid(`acc_${cleanUsername.toLowerCase()}`);
     const now = new Date().toISOString();
 
-    // Check if account already exists for user
-    const existing = Array.from(this.accounts.values()).find(
+    // Check if account already exists
+    let account = Array.from(this.accounts.values()).find(
       (a) =>
-        a.userId === userId &&
-        (a.username.toLowerCase() === cleanUsername.toLowerCase() ||
-          a.instagramUserId === instagramUserId)
+        a.username.toLowerCase() === cleanUsername.toLowerCase() ||
+        a.id === validAccountId ||
+        a.instagramUserId === instagramUserId
     );
 
-    if (existing) {
-      existing.username = cleanUsername;
-      existing.name = data.name || cleanUsername;
-      existing.isConnected = true;
-      if (data.accessToken) existing.accessToken = data.accessToken;
-      if (data.profilePictureUrl) existing.profilePictureUrl = data.profilePictureUrl;
-      existing.updatedAt = now;
-      this.accounts.set(existing.id, existing);
-
-      if (this.isUsingSupabase && this.supabase) {
-        try {
-          await this.supabase.from('instagram_accounts').upsert({
-            id: existing.id,
-            user_id: userId,
-            instagram_user_id: existing.instagramUserId,
-            username: cleanUsername,
-            name: existing.name,
-            access_token: existing.accessToken,
-            profile_picture_url: existing.profilePictureUrl,
-            is_connected: true,
-            updated_at: now,
-          });
-        } catch (e) {
-          LoggingService.error('Failed to upsert Instagram account in Supabase', e);
-        }
-      }
-
-      return existing;
+    if (account) {
+      account.username = cleanUsername;
+      account.name = data.name || cleanUsername;
+      account.userId = validUserId;
+      account.isConnected = true;
+      if (data.accessToken) account.accessToken = data.accessToken;
+      if (data.profilePictureUrl) account.profilePictureUrl = data.profilePictureUrl;
+      account.updatedAt = now;
+    } else {
+      account = {
+        id: validAccountId,
+        userId: validUserId,
+        instagramUserId,
+        username: cleanUsername,
+        name: data.name || cleanUsername,
+        profilePictureUrl: data.profilePictureUrl,
+        accessToken: data.accessToken,
+        isConnected: true,
+        connectedAt: now,
+        updatedAt: now,
+      };
     }
 
-    // Disconnect others if user wants single active account
+    // Set as primary active account
     for (const acc of this.accounts.values()) {
-      if (acc.userId === userId) {
+      if (acc.id !== account.id) {
         acc.isConnected = false;
       }
     }
-
-    const newAccount: InstagramAccount = {
-      id: `acc_${Date.now()}`,
-      userId,
-      instagramUserId,
-      username: cleanUsername,
-      name: data.name || cleanUsername,
-      profilePictureUrl: data.profilePictureUrl,
-      accessToken: data.accessToken,
-      isConnected: true,
-      connectedAt: now,
-      updatedAt: now,
-    };
-
-    this.accounts.set(newAccount.id, newAccount);
+    this.accounts.set(account.id, account);
     this.saveToDisk();
 
-    // Re-link existing automations for this user so they continue running seamlessly
+    // Re-link automations
     for (const auto of this.automations.values()) {
-      if (auto.userId === userId) {
-        auto.instagramAccountId = newAccount.id;
-      }
+      auto.instagramAccountId = account.id;
     }
 
-    if (this.isUsingSupabase && this.supabase) {
+    // Save to Supabase with valid UUIDs
+    if (this.ensureClient() && this.supabase) {
       try {
-        await this.supabase.from('instagram_accounts').insert({
-          id: newAccount.id,
-          user_id: userId,
-          instagram_user_id: instagramUserId,
+        await this.supabase.from('instagram_accounts').upsert({
+          id: account.id,
+          user_id: validUserId,
+          instagram_user_id: account.instagramUserId,
           username: cleanUsername,
-          name: newAccount.name,
-          access_token: data.accessToken,
+          name: account.name,
+          display_name: account.name,
+          access_token: data.accessToken || null,
+          profile_picture_url: data.profilePictureUrl || null,
           is_connected: true,
-          connected_at: now,
           updated_at: now,
         });
       } catch (e) {
-        LoggingService.error('Failed to insert Instagram account into Supabase', e);
+        LoggingService.warn('Failed to upsert Instagram account in Supabase (will use local store)', e);
       }
     }
 
-    return newAccount;
+    return account;
   }
 
   async disconnectInstagramAccount(userId: string, accountId?: string): Promise<boolean> {
+    const validUserId = toValidUuid(userId);
+    const validAccountId = accountId ? toValidUuid(accountId) : undefined;
+
     for (const [id, acc] of this.accounts.entries()) {
-      if (acc.userId === userId && (!accountId || id === accountId)) {
+      if (!accountId || id === accountId || id === validAccountId || acc.id === accountId) {
         acc.isConnected = false;
         acc.updatedAt = new Date().toISOString();
         this.accounts.set(id, acc);
-        return true;
       }
     }
-    return false;
+    this.saveToDisk();
+
+    if (this.ensureClient() && this.supabase) {
+      try {
+        await this.supabase
+          .from('instagram_accounts')
+          .update({ is_connected: false, updated_at: new Date().toISOString() })
+          .or(`user_id.eq.${validUserId}`);
+      } catch (_) {}
+    }
+    return true;
   }
 
   // Media Cache for Instagram Accounts
@@ -485,75 +550,89 @@ export class DatabaseService {
 
   // Automations
   async getAutomations(userId: string): Promise<Automation[]> {
-    if (this.isUsingSupabase && this.supabase) {
+    const validUserId = toValidUuid(userId);
+    const loadedAutomations: Automation[] = [];
+
+    // 1. Authoritative query from Supabase
+    if (this.ensureClient() && this.supabase) {
       try {
         const { data, error } = await this.supabase
           .from('automations')
           .select('*')
           .order('created_at', { ascending: false });
 
-        if (data && !error && data.length > 0) {
-          const loaded: Automation[] = data.map((d: any) => ({
-            id: d.id,
-            userId: d.user_id || userId,
-            instagramAccountId: d.instagram_account_id,
-            name: d.name,
-            isActive: d.is_active ?? true,
-            triggerType: d.trigger_type || 'comment',
-            targetPostType: d.target_post_type || 'all',
-            targetPostId: d.target_post_id,
-            targetPostUrl: d.target_post_url,
-            targetPostThumbnail: d.target_post_thumbnail,
-            targetPostCaption: d.target_post_caption,
-            matchType: d.match_type || 'contains',
-            keywords: Array.isArray(d.keywords) ? d.keywords : ['*'],
-            actions: Array.isArray(d.actions) ? d.actions : [],
-            stats: d.stats || { commentsMatched: 0, repliesSent: 0, dmsSent: 0 },
-            createdAt: d.created_at || new Date().toISOString(),
-            updatedAt: d.updated_at || new Date().toISOString(),
-          }));
-          loaded.forEach((a) => this.automations.set(a.id, a));
+        if (!error && data && data.length > 0) {
+          data.forEach((d: any) => {
+            const auto: Automation = {
+              id: d.id,
+              userId: d.user_id || validUserId,
+              instagramAccountId: d.instagram_account_id,
+              name: d.name,
+              isActive: d.is_active ?? true,
+              triggerType: d.trigger_type || 'comment',
+              targetPostType: d.target_post_type || 'all',
+              targetPostId: d.target_post_id,
+              targetPostUrl: d.target_post_url,
+              targetPostThumbnail: d.target_post_thumbnail,
+              targetPostCaption: d.target_post_caption,
+              matchType: d.match_type || 'contains',
+              keywords: Array.isArray(d.keywords) ? d.keywords : ['*'],
+              actions: Array.isArray(d.actions) ? d.actions : [],
+              stats: d.stats || { commentsMatched: 0, repliesSent: 0, dmsSent: 0 },
+              createdAt: d.created_at || new Date().toISOString(),
+              updatedAt: d.updated_at || new Date().toISOString(),
+            };
+            this.automations.set(auto.id, auto);
+            loadedAutomations.push(auto);
+          });
         }
       } catch (err) {
         LoggingService.warn('Supabase getAutomations error', err);
       }
     }
 
-    const all = Array.from(this.automations.values());
-    const userAutomations = all.filter(
-      (auto) => auto.userId === userId || auto.userId === 'usr_default_01' || auto.userId === 'usr_thevelocityexports_gmail_com'
-    );
-
-    if (userAutomations.length > 0) {
-      return userAutomations.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    // 2. Combine with in-memory / disk cache
+    const cached = Array.from(this.automations.values());
+    for (const a of cached) {
+      if (!loadedAutomations.some((la) => la.id === a.id)) {
+        loadedAutomations.push(a);
+      }
     }
 
-    // Return all automations for the workspace so newly created automations are never hidden
-    return all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return loadedAutomations.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
   async getActiveAutomationsForAccount(accountId: string): Promise<Automation[]> {
+    const validAccId = toValidUuid(accountId);
     const automations = await this.getAutomations('all');
-    return automations.filter(
-      (auto) =>
-        (auto.instagramAccountId === accountId ||
-          !auto.instagramAccountId ||
-          auto.instagramAccountId === 'all' ||
-          auto.instagramAccountId === 'ig_acc_01') &&
-        auto.isActive
-    );
+    return automations.filter((auto) => {
+      if (!auto.isActive) return false;
+      if (!auto.instagramAccountId || auto.instagramAccountId === 'all') return true;
+      const autoAccId = toValidUuid(auto.instagramAccountId);
+      return (
+        autoAccId === validAccId ||
+        auto.instagramAccountId === accountId ||
+        auto.instagramAccountId === validAccId
+      );
+    });
   }
 
   async getAutomationById(id: string): Promise<Automation | null> {
-    return this.automations.get(id) || null;
+    const validId = toValidUuid(id);
+    return this.automations.get(id) || this.automations.get(validId) || null;
   }
 
   async createAutomation(data: Omit<Automation, 'id' | 'createdAt' | 'updatedAt'>): Promise<Automation> {
-    const id = `auto_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const validId = toValidUuid(`auto_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`);
+    const validUserId = toValidUuid(data.userId);
+    const validAccountId = toValidUuid(data.instagramAccountId);
     const now = new Date().toISOString();
+
     const newAutomation: Automation = {
       ...data,
-      id,
+      id: validId,
+      userId: validUserId,
+      instagramAccountId: validAccountId,
       createdAt: now,
       updatedAt: now,
       stats: {
@@ -562,15 +641,16 @@ export class DatabaseService {
         dmsSent: 0,
       },
     };
-    this.automations.set(id, newAutomation);
+
+    this.automations.set(validId, newAutomation);
     this.saveToDisk();
 
-    if (this.isUsingSupabase && this.supabase) {
+    if (this.ensureClient() && this.supabase) {
       try {
         await this.supabase.from('automations').insert({
           id: newAutomation.id,
-          user_id: newAutomation.userId,
-          instagram_account_id: newAutomation.instagramAccountId,
+          user_id: validUserId,
+          instagram_account_id: validAccountId,
           name: newAutomation.name,
           is_active: newAutomation.isActive,
           trigger_type: newAutomation.triggerType,
@@ -586,8 +666,17 @@ export class DatabaseService {
           created_at: now,
           updated_at: now,
         });
+
+        // Also normalize into automation_triggers and automation_actions
+        await this.supabase.from('automation_triggers').insert({
+          automation_id: newAutomation.id,
+          trigger_source: 'instagram_comment',
+          match_type: newAutomation.matchType,
+          keywords: newAutomation.keywords,
+          target_post_id: newAutomation.targetPostId,
+        });
       } catch (err) {
-        LoggingService.warn('Supabase insert automation error (will use local store)', err);
+        LoggingService.warn('Supabase insert automation error', err);
       }
     }
 
@@ -599,20 +688,23 @@ export class DatabaseService {
     userId: string,
     data: Partial<Omit<Automation, 'id' | 'userId' | 'createdAt'>>
   ): Promise<Automation | null> {
-    const existing = this.automations.get(id);
+    const validId = toValidUuid(id);
+    const validUserId = toValidUuid(userId);
+    const existing = this.automations.get(id) || this.automations.get(validId);
     const now = new Date().toISOString();
 
     const updated: Automation = existing
       ? {
           ...existing,
           ...data,
-          userId: userId || existing.userId,
+          id: validId,
+          userId: validUserId,
           updatedAt: now,
         }
       : {
-          id,
-          userId: userId || 'usr_default_01',
-          instagramAccountId: data.instagramAccountId || 'ig_acc_01',
+          id: validId,
+          userId: validUserId,
+          instagramAccountId: data.instagramAccountId ? toValidUuid(data.instagramAccountId) : toValidUuid('ig_acc_primary'),
           name: data.name || 'Auto-DM links from comments',
           isActive: data.isActive !== undefined ? data.isActive : true,
           triggerType: data.triggerType || 'comment',
@@ -633,15 +725,15 @@ export class DatabaseService {
           },
         };
 
-    this.automations.set(id, updated);
+    this.automations.set(updated.id, updated);
     this.saveToDisk();
 
-    if (this.isUsingSupabase && this.supabase) {
+    if (this.ensureClient() && this.supabase) {
       try {
         await this.supabase.from('automations').upsert({
           id: updated.id,
-          user_id: updated.userId,
-          instagram_account_id: updated.instagramAccountId,
+          user_id: validUserId,
+          instagram_account_id: toValidUuid(updated.instagramAccountId),
           name: updated.name,
           is_active: updated.isActive,
           trigger_type: updated.triggerType,
@@ -657,58 +749,67 @@ export class DatabaseService {
           updated_at: now,
         });
       } catch (err) {
-        LoggingService.warn('Supabase update automation error (will use local store)', err);
+        LoggingService.warn('Supabase update automation error', err);
       }
     }
 
     return updated;
   }
 
-  async toggleAutomation(id: string, userId: string): Promise<Automation | null> {
-    let existing = this.automations.get(id);
-    if (!existing) {
-      return null;
-    }
+  async toggleAutomation(id: string, _userId: string): Promise<Automation | null> {
+    const validId = toValidUuid(id);
+    let existing = this.automations.get(id) || this.automations.get(validId);
+    if (!existing) return null;
+
     existing.isActive = !existing.isActive;
     existing.updatedAt = new Date().toISOString();
-    this.automations.set(id, existing);
+    this.automations.set(existing.id, existing);
     this.saveToDisk();
+
+    if (this.ensureClient() && this.supabase) {
+      try {
+        await this.supabase
+          .from('automations')
+          .update({ is_active: existing.isActive, updated_at: existing.updatedAt })
+          .eq('id', existing.id);
+      } catch (_) {}
+    }
     return existing;
   }
 
   async duplicateAutomation(id: string, userId: string): Promise<Automation | null> {
-    const existing = this.automations.get(id);
-    if (!existing || existing.userId !== userId) {
-      return null;
-    }
+    const validId = toValidUuid(id);
+    const existing = this.automations.get(id) || this.automations.get(validId);
+    if (!existing) return null;
 
-    const duplicateId = `auto_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const now = new Date().toISOString();
-    const duplicated: Automation = {
-      ...existing,
-      id: duplicateId,
+    return this.createAutomation({
+      userId,
+      instagramAccountId: existing.instagramAccountId,
       name: `${existing.name} (Copy)`,
-      createdAt: now,
-      updatedAt: now,
-      lastActivityAt: undefined,
-      stats: {
-        commentsMatched: 0,
-        repliesSent: 0,
-        dmsSent: 0,
-      },
-    };
-    this.automations.set(duplicateId, duplicated);
-    this.saveToDisk();
-    return duplicated;
+      isActive: existing.isActive,
+      triggerType: existing.triggerType,
+      targetPostType: existing.targetPostType,
+      targetPostId: existing.targetPostId,
+      targetPostUrl: existing.targetPostUrl,
+      targetPostThumbnail: existing.targetPostThumbnail,
+      targetPostCaption: existing.targetPostCaption,
+      matchType: existing.matchType,
+      keywords: [...existing.keywords],
+      actions: JSON.parse(JSON.stringify(existing.actions || [])),
+    });
   }
 
-  async deleteAutomation(id: string, userId: string): Promise<boolean> {
-    const existing = this.automations.get(id);
-    if (!existing || existing.userId !== userId) {
-      return false;
-    }
+  async deleteAutomation(id: string, _userId: string): Promise<boolean> {
+    const validId = toValidUuid(id);
     this.automations.delete(id);
+    this.automations.delete(validId);
     this.saveToDisk();
+
+    if (this.ensureClient() && this.supabase) {
+      try {
+        await this.supabase.from('automations').delete().or(`id.eq.${validId},id.eq.${id}`);
+      } catch (_) {}
+    }
     return true;
   }
 
@@ -716,7 +817,8 @@ export class DatabaseService {
     id: string,
     type: 'match' | 'reply' | 'dm'
   ): Promise<void> {
-    const auto = this.automations.get(id);
+    const validId = toValidUuid(id);
+    const auto = this.automations.get(id) || this.automations.get(validId);
     if (!auto) return;
     if (!auto.stats) {
       auto.stats = { commentsMatched: 0, repliesSent: 0, dmsSent: 0 };
@@ -725,21 +827,40 @@ export class DatabaseService {
     if (type === 'reply') auto.stats.repliesSent += 1;
     if (type === 'dm') auto.stats.dmsSent += 1;
     auto.lastActivityAt = new Date().toISOString();
-    this.automations.set(id, auto);
+    this.automations.set(auto.id, auto);
+    this.saveToDisk();
   }
 
   // Logs & Auditing
   async saveLog(log: Omit<ExecutionLog, 'id' | 'createdAt'>): Promise<ExecutionLog> {
-    const id = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const id = toValidUuid(`log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`);
     const fullLog: ExecutionLog = {
       ...log,
       id,
       createdAt: new Date().toISOString(),
     };
     this.logs.unshift(fullLog);
-    // Keep reasonable in-memory cap
     if (this.logs.length > 500) {
       this.logs.pop();
+    }
+    this.saveToDisk();
+
+    if (this.ensureClient() && this.supabase) {
+      try {
+        await this.supabase.from('automation_logs').insert({
+          id: fullLog.id,
+          user_id: toValidUuid(fullLog.userId),
+          automation_id: fullLog.automationId ? toValidUuid(fullLog.automationId) : null,
+          instagram_account_id: toValidUuid(fullLog.instagramAccountId),
+          username: fullLog.username,
+          comment_id: fullLog.commentId,
+          comment_text: fullLog.commentText,
+          action_type: fullLog.actionType,
+          action_status: fullLog.actionStatus,
+          error_message: fullLog.errorMessage,
+          is_test_event: fullLog.isTestEvent || false,
+        });
+      } catch (_) {}
     }
     return fullLog;
   }
@@ -752,7 +873,8 @@ export class DatabaseService {
       limit?: number;
     }
   ): Promise<ExecutionLog[]> {
-    let result = this.logs.filter((log) => log.userId === userId);
+    const validUserId = toValidUuid(userId);
+    let result = this.logs.filter((log) => log.userId === userId || log.userId === validUserId || !log.userId);
 
     if (options?.status && options.status !== 'all') {
       if (options.status === 'successful') {
@@ -783,7 +905,7 @@ export class DatabaseService {
     const automations = await this.getAutomations(userId);
     const active = automations.filter((a) => a.isActive);
 
-    const userLogs = this.logs.filter((l) => l.userId === userId);
+    const userLogs = await this.getLogs(userId);
     const commentsProcessed = new Set(userLogs.map((l) => l.commentId)).size;
     const successfulReplies = userLogs.filter(
       (l) => l.actionType === 'public_reply' && l.actionStatus === 'success'
@@ -795,9 +917,9 @@ export class DatabaseService {
     return {
       totalAutomations: automations.length,
       activeAutomations: active.length,
-      commentsProcessed: Math.max(commentsProcessed, 60), // include baseline historical
-      successfulReplies: Math.max(successfulReplies, 60),
-      successfulDMs: Math.max(successfulDMs, 60),
+      commentsProcessed: Math.max(commentsProcessed, 1),
+      successfulReplies: Math.max(successfulReplies, 1),
+      successfulDMs: Math.max(successfulDMs, 1),
     };
   }
 }

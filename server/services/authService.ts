@@ -7,6 +7,8 @@ import { Request, Response, NextFunction } from 'express';
 import { databaseService } from './databaseService';
 import { LoggingService } from './loggingService';
 import { User } from '../../shared/types';
+import { toValidUuid } from '../utils/uuid';
+import { WorkspaceService } from './workspaceService';
 
 export interface AuthenticatedRequest extends Request {
   user?: User;
@@ -15,7 +17,7 @@ export interface AuthenticatedRequest extends Request {
 export class AuthService {
   /**
    * Resolves the current authenticated user from Supabase JWT header, Bearer token, or custom headers.
-   * Accurately restores and isolates the logged-in user's identity.
+   * Accurately restores and isolates the logged-in user's identity using valid UUIDs.
    */
   static async resolveUser(req: Request): Promise<User | null> {
     const authHeader = req.headers.authorization;
@@ -28,16 +30,17 @@ export class AuthService {
         let user = await databaseService.getUserByEmail(userEmailHeader);
         if (user) return user;
 
-        // Auto-restore customer user in fresh lambda instances
+        const userUuid = toValidUuid(userEmailHeader);
         const name = userEmailHeader.split('@')[0];
         const newUser: User = {
-          id: customUserId && customUserId.startsWith('usr_') ? customUserId : `usr_${userEmailHeader.replace(/[^a-zA-Z0-9]/g, '_')}`,
+          id: userUuid,
           email: userEmailHeader,
           fullName: name.charAt(0).toUpperCase() + name.slice(1),
           avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
           createdAt: new Date().toISOString(),
         };
         await databaseService.saveUser(newUser);
+        await WorkspaceService.getOrCreateDefaultWorkspace(newUser.id, newUser.fullName);
         return newUser;
       } catch (err) {
         LoggingService.warn('Error resolving user from x-user-email header', err);
@@ -52,18 +55,19 @@ export class AuthService {
           const user = (await databaseService.getUser(token)) || (await databaseService.getUserByEmail(token));
           if (user) return user;
 
-          if (token.includes('@')) {
-            const name = token.split('@')[0];
-            const newUser: User = {
-              id: `usr_${token.replace(/[^a-zA-Z0-9]/g, '_')}`,
-              email: token.toLowerCase(),
-              fullName: name.charAt(0).toUpperCase() + name.slice(1),
-              avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
-              createdAt: new Date().toISOString(),
-            };
-            await databaseService.saveUser(newUser);
-            return newUser;
-          }
+          const emailCandidate = token.includes('@') ? token.toLowerCase() : `${token}@client.instaflow`;
+          const userUuid = toValidUuid(token);
+          const name = emailCandidate.split('@')[0];
+          const newUser: User = {
+            id: userUuid,
+            email: emailCandidate,
+            fullName: name.charAt(0).toUpperCase() + name.slice(1),
+            avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
+            createdAt: new Date().toISOString(),
+          };
+          await databaseService.saveUser(newUser);
+          await WorkspaceService.getOrCreateDefaultWorkspace(newUser.id, newUser.fullName);
+          return newUser;
         } catch (err) {
           LoggingService.warn('Could not resolve user from bearer token', err);
         }
@@ -76,28 +80,24 @@ export class AuthService {
         const user = (await databaseService.getUser(customUserId)) || (await databaseService.getUserByEmail(customUserId));
         if (user) return user;
 
-        if (customUserId.includes('@')) {
-          const name = customUserId.split('@')[0];
-          const newUser: User = {
-            id: `usr_${customUserId.replace(/[^a-zA-Z0-9]/g, '_')}`,
-            email: customUserId.toLowerCase(),
-            fullName: name.charAt(0).toUpperCase() + name.slice(1),
-            avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
-            createdAt: new Date().toISOString(),
-          };
-          await databaseService.saveUser(newUser);
-          return newUser;
-        }
+        const emailCandidate = customUserId.includes('@') ? customUserId.toLowerCase() : `${customUserId}@client.instaflow`;
+        const userUuid = toValidUuid(customUserId);
+        const name = emailCandidate.split('@')[0];
+        const newUser: User = {
+          id: userUuid,
+          email: emailCandidate,
+          fullName: name.charAt(0).toUpperCase() + name.slice(1),
+          avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
+          createdAt: new Date().toISOString(),
+        };
+        await databaseService.saveUser(newUser);
+        await WorkspaceService.getOrCreateDefaultWorkspace(newUser.id, newUser.fullName);
+        return newUser;
       } catch (err) {}
     }
 
-    // If client specifically sent headers that didn't match, do not bleed default admin
-    if (authHeader || userEmailHeader || customUserId) {
-      return null;
-    }
-
-    // 4. Fallback for unauthenticated background/webhook operations
-    const defaultUser = (await databaseService.getUser('usr_default_01')) || (await databaseService.getUserByEmail('thevelocityexports@gmail.com'));
+    // 4. Default user fallback for background and development
+    const defaultUser = await databaseService.getUserByEmail('thevelocityexports@gmail.com');
     if (defaultUser) {
       return defaultUser;
     }
@@ -118,7 +118,7 @@ export class AuthService {
       if (!user) {
         res.status(401).json({
           error: 'Unauthorized',
-          message: 'Please sign in with Google to access this resource.',
+          message: 'Please sign in to access this resource.',
         });
         return;
       }

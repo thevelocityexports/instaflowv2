@@ -191,6 +191,18 @@ export async function runAllTests(): Promise<{ passed: number; failed: number }>
   assert(validWebhook.isValid && !invalidWebhook.isValid, '13. Webhook verification rejects mismatched verify tokens');
 
   // Test 14: Mock test event execution via AutomationService
+  const priceAuto = await databaseService.createAutomation({
+    userId: 'usr_default_01',
+    instagramAccountId: 'ig_acc_01',
+    name: 'Price Inquiry Automation',
+    isActive: true,
+    triggerType: 'comment',
+    targetPostType: 'all',
+    matchType: 'contains',
+    keywords: ['PRICE'],
+    actions: [{ actionType: 'public_reply', messageTemplate: 'Price is $49', isEnabled: true }],
+  });
+
   const mockEventResult = await AutomationService.processComment({
     platform: 'instagram',
     accountId: 'ig_acc_01',
@@ -202,6 +214,7 @@ export async function runAllTests(): Promise<{ passed: number; failed: number }>
     isTestMode: true,
   });
   assert(mockEventResult.processed && mockEventResult.matchedAutomations > 0, '14. Mock test event successfully executes through the real automation pipeline');
+  await databaseService.deleteAutomation(priceAuto.id, 'usr_default_01');
 
   console.log('\n---------------------------------------------');
   console.log(`TEST RESULTS: ${passed} passed, ${failed} failed`);
@@ -213,6 +226,6 @@ export async function runAllTests(): Promise<{ passed: number; failed: number }>
 // Execute if run directly via tsx
 if (process.argv[1]?.endsWith('automationEngine.test.ts')) {
   runAllTests().then(({ failed }) => {
-    if (failed > 0) process.exit(1);
+    process.exit(failed > 0 ? 1 : 0);
   });
 }

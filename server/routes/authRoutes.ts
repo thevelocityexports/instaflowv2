@@ -3,6 +3,8 @@ import { databaseService } from '../services/databaseService';
 import { AuthService } from '../services/authService';
 import { User } from '../../shared/types';
 import { LoggingService } from '../services/loggingService';
+import { toValidUuid } from '../utils/uuid';
+import { WorkspaceService } from '../services/workspaceService';
 
 const router = Router();
 
@@ -26,7 +28,7 @@ router.get('/me', async (req: Request, res: Response): Promise<void> => {
 
 /**
  * POST /api/auth/signup or /api/auth/register
- * Creates a new dedicated customer account & isolated database bucket
+ * Creates a new dedicated customer account & isolated database bucket with valid UUIDs
  */
 router.post(['/signup', '/register'], async (req: Request, res: Response): Promise<void> => {
   try {
@@ -52,11 +54,11 @@ router.post(['/signup', '/register'], async (req: Request, res: Response): Promi
       return;
     }
 
-    const newUserId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const userUuid = toValidUuid(cleanEmail);
     const name = (fullName || cleanEmail.split('@')[0]).trim();
 
     const newUser: User = {
-      id: newUserId,
+      id: userUuid,
       email: cleanEmail,
       fullName: name,
       companyName: companyName ? companyName.trim() : undefined,
@@ -66,8 +68,9 @@ router.post(['/signup', '/register'], async (req: Request, res: Response): Promi
     };
 
     await databaseService.saveUser(newUser);
+    await WorkspaceService.getOrCreateDefaultWorkspace(newUser.id, newUser.fullName, newUser.companyName);
 
-    LoggingService.info(`New customer signed up: ${cleanEmail} (ID: ${newUserId})`);
+    LoggingService.info(`New customer signed up: ${cleanEmail} (ID: ${userUuid})`);
 
     const { password: _, ...safeUser } = newUser;
 
@@ -88,7 +91,7 @@ router.post(['/signup', '/register'], async (req: Request, res: Response): Promi
 
 /**
  * POST /api/auth/login or /api/auth/signin
- * Authenticates customer and returns session token
+ * Authenticates customer and returns session token with valid UUID
  */
 router.post(['/login', '/signin'], async (req: Request, res: Response): Promise<void> => {
   try {
@@ -102,12 +105,13 @@ router.post(['/login', '/signin'], async (req: Request, res: Response): Promise<
     const cleanEmail = email.trim().toLowerCase();
     let user = await databaseService.getUserByEmail(cleanEmail);
 
+    const userUuid = toValidUuid(cleanEmail);
+
     // If user not yet created, support seamless first-time customer initialization
     if (!user) {
-      const newUserId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const name = cleanEmail.split('@')[0];
       user = {
-        id: newUserId,
+        id: userUuid,
         email: cleanEmail,
         fullName: name.charAt(0).toUpperCase() + name.slice(1),
         password: password.trim(),
@@ -115,6 +119,7 @@ router.post(['/login', '/signin'], async (req: Request, res: Response): Promise<
         createdAt: new Date().toISOString(),
       };
       await databaseService.saveUser(user);
+      await WorkspaceService.getOrCreateDefaultWorkspace(user.id, user.fullName);
     } else if (user.password && user.password !== password.trim()) {
       res.status(401).json({ error: 'Incorrect password. Please verify your credentials and try again.' });
       return;
@@ -142,8 +147,8 @@ router.post(['/login', '/signin'], async (req: Request, res: Response): Promise<
 /**
  * POST /api/auth/google
  */
-router.post('/google', async (req: Request, res: Response): Promise<void> => {
-  const defaultUser = await databaseService.getUser('usr_default_01');
+router.post('/google', async (_req: Request, res: Response): Promise<void> => {
+  const defaultUser = await databaseService.getUserByEmail('thevelocityexports@gmail.com');
   if (defaultUser) {
     const { password, ...safeUser } = defaultUser;
     res.json({

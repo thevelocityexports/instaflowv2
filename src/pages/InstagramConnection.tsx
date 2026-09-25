@@ -239,9 +239,16 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
       });
 
       if (res && (res.success || res.account)) {
+        const acc = res.account;
+        if (acc) {
+          try {
+            localStorage.setItem('instaflow_connected_account', JSON.stringify(acc));
+            localStorage.setItem('instaflow_active_account', JSON.stringify(acc));
+          } catch {}
+        }
         setConnectResult({
           type: 'success',
-          text: `Account @${res.account.username} connected and active! Automations and live reels are ready.`,
+          text: `Account @${acc?.username || handleToUse} connected and active! Automations and live reels are ready.`,
         });
         setShowConnectForm(false);
         setShowMetaModal(false);

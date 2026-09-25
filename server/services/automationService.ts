@@ -147,6 +147,14 @@ export class AutomationService {
     const accessToken = account?.accessToken || process.env.META_ACCESS_TOKEN || process.env.INSTAGRAM_ACCESS_TOKEN;
 
     const activeAutomations = await databaseService.getActiveAutomationsForAccount(targetAccountId);
+    if (accountId && accountId !== targetAccountId) {
+      const extra = await databaseService.getActiveAutomationsForAccount(accountId);
+      extra.forEach((a) => {
+        if (!activeAutomations.some((item) => item.id === a.id)) {
+          activeAutomations.push(a);
+        }
+      });
+    }
 
     if (activeAutomations.length === 0) {
       LoggingService.info(`No active automations found for account: ${targetAccountId}`);

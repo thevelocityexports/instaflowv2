@@ -30,7 +30,13 @@ export default function App() {
     return null;
   });
   const [isCheckingAuth, setIsCheckingAuth] = useState(!currentUser);
-  const [connectedAccount, setConnectedAccount] = useState<InstagramAccount | null>(null);
+  const [connectedAccount, setConnectedAccount] = useState<InstagramAccount | null>(() => {
+    try {
+      const stored = localStorage.getItem('instaflow_connected_account');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return null;
+  });
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentActivity, setRecentActivity] = useState<ExecutionLog[]>([]);
   const [automations, setAutomations] = useState<Automation[]>([]);
@@ -77,8 +83,22 @@ export default function App() {
         if (accounts.length > 0) {
           const activeAcc = accounts.find((a) => a.isConnected) || accounts[0];
           setConnectedAccount(activeAcc || null);
+          if (activeAcc) {
+            try {
+              localStorage.setItem('instaflow_connected_account', JSON.stringify(activeAcc));
+            } catch {}
+          }
         } else {
-          setConnectedAccount(null);
+          // If server returned 0 accounts, check if we have a locally active account
+          const cached = localStorage.getItem('instaflow_connected_account');
+          if (cached) {
+            try {
+              const parsed = JSON.parse(cached);
+              if (parsed?.username) {
+                setConnectedAccount(parsed);
+              }
+            } catch {}
+          }
         }
       }
 
@@ -92,8 +112,6 @@ export default function App() {
         setAutomations(auts);
         if (auts.length > 0) {
           setEditingAutomation(auts[0]);
-        } else {
-          setEditingAutomation(null);
         }
       }
 
@@ -244,6 +262,8 @@ export default function App() {
   const handleDisconnectInstagram = async (accountId?: string) => {
     try {
       await ApiClient.disconnectInstagram(accountId);
+      localStorage.removeItem('instaflow_connected_account');
+      setConnectedAccount(null);
       showToast('Instagram account disconnected.');
       loadData();
     } catch (err: any) {
@@ -254,6 +274,7 @@ export default function App() {
   const handleSignOut = async () => {
     await ApiClient.signOut();
     localStorage.removeItem('instaflow_active_reels');
+    localStorage.removeItem('instaflow_connected_account');
     setCurrentUser(null);
     setConnectedAccount(null);
     setAutomations([]);
