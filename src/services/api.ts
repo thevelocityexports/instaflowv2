@@ -165,6 +165,10 @@ export class ApiClient {
     }
   }
 
+  static async connectInstagramDirect(username: string, name?: string): Promise<{ success: boolean; account: InstagramAccount; message: string }> {
+    return this.connectInstagramAccount({ username, name });
+  }
+
   static async connectInstagramAccount(data: {
     username: string;
     name?: string;

@@ -7,6 +7,7 @@ import { Automations } from './pages/Automations';
 import { Comments } from './pages/Comments';
 import { InstagramConnection } from './pages/InstagramConnection';
 import { Settings } from './pages/Settings';
+import { ManychatOnboardingFlow } from './components/ManychatOnboardingFlow';
 import { ApiClient } from './services/api';
 import {
   Automation,
@@ -361,13 +362,22 @@ export default function App() {
           </main>
         )}
 
-        {/* TAB 7: INSTAGRAM CONNECTION */}
+        {/* TAB 7: INSTAGRAM CONNECTION (Exact Manychat Screenshots 1, 2, 3, 4, 5) */}
         {activeTab === 'instagram' && (
           <main className="flex-1 overflow-y-auto">
-            <InstagramConnection
-              connectedAccount={connectedAccount}
-              onDisconnect={handleDisconnectInstagram}
-              onRefresh={loadData}
+            <ManychatOnboardingFlow
+              currentConnectedAccount={connectedAccount}
+              onBackToApp={() => {
+                setActiveTab('automations');
+                setAutomationsView('builder');
+              }}
+              onAccountConnected={(acc) => {
+                setConnectedAccount(acc);
+                loadData();
+                setActiveTab('automations');
+                setAutomationsView('builder');
+                showToast(`✓ Connected to @${acc.username}! All live reels synchronized.`);
+              }}
             />
           </main>
         )}
