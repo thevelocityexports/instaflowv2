@@ -330,6 +330,39 @@ router.post(
 );
 
 /**
+ * GET /api/instagram/proxy-image
+ * Proxies Instagram CDN images to prevent referrer/CORS blocking in web browsers
+ */
+router.get('/proxy-image', async (req, res): Promise<void> => {
+  const imageUrl = req.query.url as string;
+  if (!imageUrl || typeof imageUrl !== 'string') {
+    res.status(400).json({ error: 'Image URL query parameter is required' });
+    return;
+  }
+
+  try {
+    const imgRes = await fetch(imageUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+    });
+
+    if (!imgRes.ok) {
+      res.status(imgRes.status).send('Failed to load image from CDN');
+      return;
+    }
+
+    const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400');
+    const buffer = Buffer.from(await imgRes.arrayBuffer());
+    res.send(buffer);
+  } catch (err: any) {
+    res.status(500).send('Proxy error');
+  }
+});
+
+/**
  * GET /api/instagram/connect-account
  * Returns currently connected account info
  */

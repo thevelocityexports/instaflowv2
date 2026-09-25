@@ -420,8 +420,8 @@ export class InstagramService {
   }
 
   /**
-   * ACTION 3: Fetch Live Instagram Reels & Media
-   * GET /{ig-user-id}/media?fields=id,caption,media_type,media_product_type,thumbnail_url,media_url,permalink,timestamp,like_count,comments_count
+   * ACTION 3: Fetch Media / Posts / Reels for an Instagram Account
+   * Handles Instagram Graph API endpoint (graph.instagram.com) and Facebook Graph (graph.facebook.com)
    */
   static async getAccountMedia(options: {
     instagramUserId?: string;
@@ -442,63 +442,76 @@ export class InstagramService {
       };
     }
 
+    const cleanToken = accessToken.trim();
     const targetId = instagramUserId && instagramUserId.trim() ? instagramUserId.trim() : 'me';
 
-    try {
-      const fields = 'id,caption,media_type,media_product_type,thumbnail_url,media_url,permalink,timestamp,like_count,comments_count';
-      const url = `${this.GRAPH_API_BASE}/${targetId}/media?fields=${fields}&limit=${limit}&access_token=${accessToken}`;
-      
-      const response = await fetch(url);
-      const data = await response.json();
+    // List of candidate endpoints (Instagram User Token vs Meta Page Token)
+    const candidateEndpoints = [
+      `https://graph.instagram.com/v21.0/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=${limit}&access_token=${cleanToken}`,
+      `https://graph.instagram.com/v21.0/${targetId}/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=${limit}&access_token=${cleanToken}`,
+      `https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=${limit}&access_token=${cleanToken}`,
+      `https://graph.facebook.com/v21.0/${targetId}/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=${limit}&access_token=${cleanToken}`,
+      `https://graph.facebook.com/v21.0/${targetId}?fields=media{id,caption,media_type,media_url,thumbnail_url,permalink,timestamp}&access_token=${cleanToken}`,
+    ];
 
-      if (!response.ok || data.error) {
-        LoggingService.error('Meta Graph API error fetching media:', data.error);
-        return {
-          success: false,
-          media: [],
-          error: data.error?.message || 'Meta Graph API returned an error fetching posts and reels.',
-        };
+    let lastError: any = null;
+
+    for (const url of candidateEndpoints) {
+      try {
+        LoggingService.info(`Attempting to fetch Instagram media from endpoint: ${url.split('?')[0]}`);
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (response.ok && !data.error) {
+          const rawItems: any[] = data.data || (data.media && data.media.data) || [];
+          if (rawItems && Array.isArray(rawItems)) {
+            const media: InstagramMediaItem[] = rawItems.map((item) => {
+              const isReel =
+                item.media_product_type === 'REELS' ||
+                item.media_type === 'VIDEO' ||
+                (item.permalink && item.permalink.includes('/reel/'));
+
+              return {
+                id: item.id,
+                caption: item.caption || '',
+                mediaType: item.media_type || 'IMAGE',
+                mediaProductType: item.media_product_type || (isReel ? 'REELS' : 'FEED'),
+                isReel,
+                mediaUrl: item.media_url || item.thumbnail_url,
+                thumbnailUrl: item.thumbnail_url || item.media_url,
+                permalink: item.permalink,
+                timestamp: item.timestamp,
+                likeCount: item.like_count ?? 0,
+                commentsCount: item.comments_count ?? 0,
+              };
+            });
+
+            LoggingService.info(`Successfully fetched ${media.length} live media items from Meta Graph API`);
+            return {
+              success: true,
+              media,
+            };
+          }
+        } else if (data.error) {
+          lastError = data.error;
+          LoggingService.warn(`Candidate endpoint returned error: ${data.error.message || JSON.stringify(data.error)}`);
+        }
+      } catch (err: any) {
+        lastError = err;
+        LoggingService.warn(`Candidate fetch error on ${url.split('?')[0]}`, err);
       }
-
-      const rawItems: any[] = data.data || [];
-      const media: InstagramMediaItem[] = rawItems.map((item) => {
-        const isReel =
-          item.media_product_type === 'REELS' ||
-          item.media_type === 'VIDEO' ||
-          (item.permalink && item.permalink.includes('/reel/'));
-
-        return {
-          id: item.id,
-          caption: item.caption || '',
-          mediaType: item.media_type || 'IMAGE',
-          mediaProductType: item.media_product_type || (isReel ? 'REELS' : 'FEED'),
-          isReel,
-          mediaUrl: item.media_url,
-          thumbnailUrl: item.thumbnail_url || item.media_url,
-          permalink: item.permalink,
-          timestamp: item.timestamp,
-          likeCount: item.like_count ?? 0,
-          commentsCount: item.comments_count ?? 0,
-        };
-      });
-
-      return {
-        success: true,
-        media,
-      };
-    } catch (err: any) {
-      LoggingService.error('Exception fetching Instagram media from Meta', err);
-      return {
-        success: false,
-        media: [],
-        error: err?.message || 'Network error fetching media from Meta Graph API.',
-      };
     }
+
+    return {
+      success: false,
+      media: [],
+      error: lastError?.message || 'Meta Graph API returned an error fetching posts and reels.',
+    };
   }
 
   /**
    * ACTION 4: Connect & Sync Live Profile and Media using Meta Access Token
-   * Queries Meta Graph API (supports Instagram Scoped ID, e.g. 17841433664757597 or 'me')
+   * Queries Meta Graph API across graph.instagram.com and graph.facebook.com
    */
   static async fetchProfileAndMediaWithToken(options: {
     accessToken: string;
@@ -521,70 +534,69 @@ export class InstagramService {
     const cleanToken = accessToken.trim();
     const targetId = instagramUserId && instagramUserId.trim() ? instagramUserId.trim() : 'me';
 
-    try {
-      // 1. Fetch live Profile
-      const profileUrl = `${this.GRAPH_API_BASE}/${targetId}?fields=id,username,name,profile_picture_url,followers_count,media_count&access_token=${cleanToken}`;
-      const profRes = await fetch(profileUrl);
-      const profData = await profRes.json();
+    let finalUsername = username ? username.replace(/^@/, '').trim() : '';
+    let finalName = finalUsername || 'Instagram Account';
+    let finalId = targetId !== 'me' ? targetId : `ig_${Date.now()}`;
+    let profilePictureUrl: string | undefined = undefined;
+    let followersCount = 0;
+    let mediaCount = 0;
 
-      let finalUsername = username ? username.replace(/^@/, '').trim() : '';
-      let finalName = finalUsername || 'Instagram Account';
-      let finalId = targetId !== 'me' ? targetId : `ig_${Date.now()}`;
-      let profilePictureUrl: string | undefined = undefined;
-      let followersCount = 0;
-      let mediaCount = 0;
+    // Try candidate profile endpoints
+    const profileCandidates = [
+      `https://graph.instagram.com/v21.0/me?fields=id,username,name,profile_picture_url,account_type,media_count&access_token=${cleanToken}`,
+      `https://graph.instagram.com/me?fields=id,username,name,profile_picture_url,account_type,media_count&access_token=${cleanToken}`,
+      `https://graph.instagram.com/v21.0/${targetId}?fields=id,username,name,profile_picture_url,media_count&access_token=${cleanToken}`,
+      `https://graph.facebook.com/v21.0/${targetId}?fields=id,username,name,profile_picture_url,followers_count,media_count&access_token=${cleanToken}`,
+      `https://graph.facebook.com/v21.0/me?fields=id,username,name,profile_picture_url&access_token=${cleanToken}`,
+    ];
 
-      if (profRes.ok && !profData.error) {
-        if (profData.username) finalUsername = profData.username;
-        if (profData.name) finalName = profData.name;
-        if (profData.id) finalId = profData.id;
-        if (profData.profile_picture_url) profilePictureUrl = profData.profile_picture_url;
-        if (profData.followers_count) followersCount = profData.followers_count;
-        if (profData.media_count) mediaCount = profData.media_count;
-      } else {
-        LoggingService.warn('Could not fetch full profile from Meta Graph, using token details:', profData?.error);
-        if (profData?.error?.message) {
-          LoggingService.warn(`Meta Graph Message: ${profData.error.message}`);
+    for (const pUrl of profileCandidates) {
+      try {
+        LoggingService.info(`Querying Meta profile endpoint: ${pUrl.split('?')[0]}`);
+        const profRes = await fetch(pUrl);
+        const profData = await profRes.json();
+
+        if (profRes.ok && !profData.error) {
+          if (profData.username) finalUsername = profData.username;
+          if (profData.name) finalName = profData.name;
+          if (profData.id) finalId = profData.id;
+          if (profData.profile_picture_url) profilePictureUrl = profData.profile_picture_url;
+          if (profData.followers_count) followersCount = profData.followers_count;
+          if (profData.media_count) mediaCount = profData.media_count;
+          LoggingService.info(`Resolved Meta profile: @${finalUsername}, id: ${finalId}, pic: ${profilePictureUrl ? 'FOUND' : 'NOT FOUND'}`);
+          break;
+        } else if (profData.error) {
+          LoggingService.warn(`Profile candidate error: ${profData.error.message}`);
         }
+      } catch (e) {
+        LoggingService.warn(`Profile candidate failed: ${pUrl.split('?')[0]}`, e);
       }
-
-      if (!finalUsername) {
-        finalUsername = 'panchalohajewels';
-        finalName = 'Panchaloha Jewels';
-      }
-
-      // 2. Fetch live media & reels
-      const mediaResult = await this.getAccountMedia({
-        instagramUserId: finalId !== 'me' ? finalId : undefined,
-        accessToken: cleanToken,
-        limit: 30,
-      });
-
-      return {
-        success: true,
-        profile: {
-          id: finalId,
-          username: finalUsername,
-          name: finalName,
-          profilePictureUrl,
-          followersCount,
-          mediaCount: mediaResult.media.length || mediaCount,
-        },
-        media: mediaResult.media,
-      };
-    } catch (err: any) {
-      LoggingService.error('Error fetching live profile with Meta token', err);
-      return {
-        success: false,
-        profile: {
-          id: targetId,
-          username: username || 'panchalohajewels',
-          name: username || 'Panchaloha Jewels',
-        },
-        media: [],
-        error: err?.message || 'Failed to connect via Meta Graph API',
-      };
     }
+
+    if (!finalUsername) {
+      finalUsername = username || 'panchalohajewels';
+      finalName = 'Panchaloha Jewels';
+    }
+
+    // 2. Fetch live media & reels
+    const mediaResult = await this.getAccountMedia({
+      instagramUserId: finalId !== 'me' ? finalId : undefined,
+      accessToken: cleanToken,
+      limit: 30,
+    });
+
+    return {
+      success: true,
+      profile: {
+        id: finalId,
+        username: finalUsername,
+        name: finalName,
+        profilePictureUrl,
+        followersCount,
+        mediaCount: mediaResult.media.length || mediaCount,
+      },
+      media: mediaResult.media,
+    };
   }
 }
 

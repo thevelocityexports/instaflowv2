@@ -102,16 +102,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <img
                       src={connectedAccount.profilePictureUrl}
                       alt={connectedAccount.username}
+                      referrerPolicy="no-referrer"
+                      crossOrigin="anonymous"
                       className="w-8 h-8 rounded-full object-cover border border-slate-200 shadow-xs"
                       onError={(e) => {
+                        // Fallback to monogram if Instagram CDN URL expires
                         e.currentTarget.style.display = 'none';
+                        const fallback = e.currentTarget.parentElement?.querySelector('.avatar-fallback') as HTMLElement;
+                        if (fallback) fallback.style.display = 'flex';
                       }}
                     />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 via-pink-500 to-rose-500 flex items-center justify-center text-[10px] font-bold text-white shadow-xs">
-                      {(connectedAccount.name || connectedAccount.username || 'IG').slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
+                  ) : null}
+                  <div
+                    className={`w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 via-pink-500 to-rose-500 items-center justify-center text-[10px] font-bold text-white shadow-xs avatar-fallback ${
+                      connectedAccount.profilePictureUrl ? 'hidden' : 'flex'
+                    }`}
+                  >
+                    {(connectedAccount.name || connectedAccount.username || 'IG').slice(0, 2).toUpperCase()}
+                  </div>
                   <span className="absolute -bottom-1 -right-1 bg-[#0066ff] text-white text-[7px] font-black px-1 py-0.2 rounded-xs shadow-xs tracking-tighter">
                     PRO
                   </span>
