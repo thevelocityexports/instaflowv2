@@ -165,24 +165,38 @@ export default function App() {
 
   const handleSaveAutomation = async (data: Partial<Automation>) => {
     try {
+      let saved: Automation | null = null;
       if (editingAutomation && editingAutomation.id) {
-        await ApiClient.updateAutomation(editingAutomation.id, data);
+        const res = await ApiClient.updateAutomation(editingAutomation.id, data);
+        saved = res?.automation || null;
         showToast('✓ Automation saved and is now LIVE!');
       } else {
-        const created = await ApiClient.createAutomation(data);
-        if (created && created.automation) {
-          setEditingAutomation(created.automation);
+        const res = await ApiClient.createAutomation(data);
+        saved = res?.automation || null;
+        if (saved) {
+          setEditingAutomation(saved);
         }
         showToast('✓ Automation created and is now LIVE!');
       }
+
+      if (saved) {
+        setAutomations((prev) => {
+          const exists = prev.some((a) => a.id === saved!.id);
+          if (exists) {
+            return prev.map((a) => (a.id === saved!.id ? saved! : a));
+          }
+          return [saved!, ...prev];
+        });
+      }
+
       await loadData();
     } catch (err: any) {
       console.warn('Save automation warning:', err);
-      // If update threw 404, fallback to creating it
       try {
-        const created = await ApiClient.createAutomation(data);
-        if (created && created.automation) {
-          setEditingAutomation(created.automation);
+        const res = await ApiClient.createAutomation(data);
+        if (res?.automation) {
+          setEditingAutomation(res.automation);
+          setAutomations((prev) => [res.automation, ...prev.filter((a) => a.id !== res.automation.id)]);
         }
         showToast('✓ Automation saved and is now LIVE!');
         await loadData();
