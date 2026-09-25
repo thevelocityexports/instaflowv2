@@ -38,8 +38,8 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
   >('none');
 
   // Instagram Login Form State inside Instagram Modal (Screenshot 5)
-  const [igIdentifier, setIgIdentifier] = useState('panchalohajewels');
-  const [igPassword, setIgPassword] = useState('••••••••••••');
+  const [igIdentifier, setIgIdentifier] = useState('');
+  const [igPassword, setIgPassword] = useState('');
   const [isProcessingLogin, setIsProcessingLogin] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 

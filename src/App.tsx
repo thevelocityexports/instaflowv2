@@ -195,6 +195,7 @@ export default function App() {
         }}
         connectedAccount={connectedAccount}
         onOpenTestModal={() => setIsTestModalOpen(true)}
+        onDisconnectAccount={handleDisconnectInstagram}
       />
 
       {/* Main Content Area */}
