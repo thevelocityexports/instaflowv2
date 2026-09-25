@@ -1984,11 +1984,36 @@ dotenv2.config();
 var app = express();
 app.use(cors());
 app.use((req, _res, next) => {
-  const matchedPath = req.headers["x-matched-path"] || req.headers["x-forwarded-uri"];
-  if (matchedPath && (req.url === "/" || req.url === "/api" || req.url.startsWith("/?") || req.url.startsWith("/api?"))) {
+  const rawQueryParam = req.query?.__path || req.query?.path || req.query?.all || req.query?.route;
+  let queryParamPath = null;
+  if (Array.isArray(rawQueryParam)) {
+    queryParamPath = rawQueryParam.join("/");
+  } else if (typeof rawQueryParam === "string" && rawQueryParam.trim().length > 0) {
+    queryParamPath = rawQueryParam.trim();
+  }
+  const forwardedUri = req.headers["x-forwarded-uri"] || req.headers["x-original-url"] || req.headers["x-real-origin-url"];
+  const matchedPathHeader = req.headers["x-matched-path"] || req.headers["x-invoke-path"];
+  let routeMatchesPath = null;
+  if (req.headers["x-now-route-matches"]) {
+    try {
+      const matchParams = new URLSearchParams(req.headers["x-now-route-matches"]);
+      const match1 = matchParams.get("1") || matchParams.get("path") || matchParams.get("match");
+      if (match1) routeMatchesPath = match1;
+    } catch {
+    }
+  }
+  const validMatchedPath = matchedPathHeader && !matchedPathHeader.includes("index.js") && !matchedPathHeader.endsWith("/index") && matchedPathHeader !== "/" && matchedPathHeader !== "/api" ? matchedPathHeader : null;
+  const candidatePath = queryParamPath || forwardedUri || routeMatchesPath || validMatchedPath;
+  if (candidatePath) {
+    let cleanMatched = candidatePath.split("?")[0];
+    if (!cleanMatched.startsWith("/")) {
+      cleanMatched = "/" + cleanMatched;
+    }
     const queryIdx = req.url.indexOf("?");
-    const queryString = queryIdx !== -1 ? req.url.slice(queryIdx) : "";
-    req.url = matchedPath + queryString;
+    const queryString = queryIdx !== -1 ? req.url.slice(queryIdx) : candidatePath.includes("?") ? "?" + candidatePath.split("?")[1] : "";
+    if (req.url === "/" || req.url === "/api" || req.url === "/api/" || req.url.startsWith("/?") || req.url.startsWith("/api?") || req.url.startsWith("/api/index") || req.url.startsWith("/index")) {
+      req.url = cleanMatched + queryString;
+    }
   }
   if (req.body && typeof req.body === "object" && Object.keys(req.body).length > 0) {
     req._body = true;
@@ -2041,8 +2066,12 @@ app.use((err, _req, res, _next) => {
   });
 });
 
-// server/api/[...path].ts
+// server/api/index.ts
 function handler(req, res) {
+  if (req.query?.__path) {
+    const p = req.query.__path;
+    req.url = p.startsWith("/") ? p : `/${p}`;
+  }
   return app(req, res);
 }
 export {

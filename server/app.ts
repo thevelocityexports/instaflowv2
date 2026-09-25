@@ -24,12 +24,53 @@ app.use(cors());
 
 // Middleware to normalize req.url and req.body for serverless / Vercel proxying
 app.use((req: Request, _res: Response, next: NextFunction) => {
-  // If Vercel rewrote request to /api or /, restore path from headers if available
-  const matchedPath = (req.headers['x-matched-path'] as string) || (req.headers['x-forwarded-uri'] as string);
-  if (matchedPath && (req.url === '/' || req.url === '/api' || req.url.startsWith('/?') || req.url.startsWith('/api?'))) {
+  // Extract custom query path or headers if forwarded by reverse proxy / serverless rewrite
+  const rawQueryParam = req.query?.__path || req.query?.path || req.query?.all || req.query?.route;
+  let queryParamPath: string | null = null;
+  if (Array.isArray(rawQueryParam)) {
+    queryParamPath = rawQueryParam.join('/');
+  } else if (typeof rawQueryParam === 'string' && rawQueryParam.trim().length > 0) {
+    queryParamPath = rawQueryParam.trim();
+  }
+
+  const forwardedUri = (req.headers['x-forwarded-uri'] as string) || (req.headers['x-original-url'] as string) || (req.headers['x-real-origin-url'] as string);
+  const matchedPathHeader = (req.headers['x-matched-path'] as string) || (req.headers['x-invoke-path'] as string);
+
+  let routeMatchesPath: string | null = null;
+  if (req.headers['x-now-route-matches']) {
+    try {
+      const matchParams = new URLSearchParams(req.headers['x-now-route-matches'] as string);
+      const match1 = matchParams.get('1') || matchParams.get('path') || matchParams.get('match');
+      if (match1) routeMatchesPath = match1;
+    } catch {}
+  }
+
+  // Filter out destination script paths like /api/index.js or /api/index
+  const validMatchedPath = matchedPathHeader && !matchedPathHeader.includes('index.js') && !matchedPathHeader.endsWith('/index') && matchedPathHeader !== '/' && matchedPathHeader !== '/api'
+    ? matchedPathHeader
+    : null;
+
+  const candidatePath = queryParamPath || forwardedUri || routeMatchesPath || validMatchedPath;
+
+  if (candidatePath) {
+    let cleanMatched = candidatePath.split('?')[0];
+    if (!cleanMatched.startsWith('/')) {
+      cleanMatched = '/' + cleanMatched;
+    }
     const queryIdx = req.url.indexOf('?');
-    const queryString = queryIdx !== -1 ? req.url.slice(queryIdx) : '';
-    req.url = matchedPath + queryString;
+    const queryString = queryIdx !== -1 ? req.url.slice(queryIdx) : (candidatePath.includes('?') ? '?' + candidatePath.split('?')[1] : '');
+
+    if (
+      req.url === '/' ||
+      req.url === '/api' ||
+      req.url === '/api/' ||
+      req.url.startsWith('/?') ||
+      req.url.startsWith('/api?') ||
+      req.url.startsWith('/api/index') ||
+      req.url.startsWith('/index')
+    ) {
+      req.url = cleanMatched + queryString;
+    }
   }
 
   // If body is already parsed by serverless runtime, prevent body-parser from stalling

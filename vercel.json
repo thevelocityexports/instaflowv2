@@ -3,18 +3,30 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api/$1"
+      "destination": "/api/index.js?__path=/api/$1"
+    },
+    {
+      "source": "/api",
+      "destination": "/api/index.js?__path=/api"
     },
     {
       "source": "/webhooks/(.*)",
-      "destination": "/api/webhooks/$1"
+      "destination": "/api/index.js?__path=/api/webhooks/$1"
+    },
+    {
+      "source": "/webhooks",
+      "destination": "/api/index.js?__path=/api/webhooks"
     },
     {
       "source": "/webhook/(.*)",
-      "destination": "/api/webhooks/$1"
+      "destination": "/api/index.js?__path=/api/webhook/$1"
     },
     {
-      "source": "/((?!api/|webhooks/|webhook/).*)",
+      "source": "/webhook",
+      "destination": "/api/index.js?__path=/api/webhook"
+    },
+    {
+      "source": "/((?!api|webhooks|webhook).*)",
       "destination": "/index.html"
     }
   ]
