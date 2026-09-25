@@ -206,7 +206,8 @@ export default function App() {
                 initialData={editingAutomation}
                 onSave={handleSaveAutomation}
                 onCancel={() => setAutomationsView('list')}
-                connectedAccountUsername={connectedAccount?.username || 'vajramakutajewellers'}
+                connectedAccount={connectedAccount}
+                connectedAccountUsername={connectedAccount?.username || 'thevelocityexports'}
               />
             ) : (
               <div className="flex-1 overflow-y-auto">

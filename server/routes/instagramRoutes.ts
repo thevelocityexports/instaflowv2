@@ -225,6 +225,117 @@ router.get('/connect-account', AuthService.requireAuth, async (req: Authenticate
 });
 
 /**
+ * GET /api/instagram/media or /api/instagram/reels
+ * Fetches real Instagram media & reels from Meta Graph API for the active account
+ */
+router.get(
+  ['/media', '/reels', '/posts'],
+  AuthService.requireAuth,
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const accountId = req.query.accountId as string | undefined;
+      const userId = req.user?.id || 'usr_default_01';
+
+      let targetAccount: any = null;
+      if (accountId) {
+        targetAccount = await databaseService.getAccountById(accountId);
+      }
+      if (!targetAccount) {
+        targetAccount = await databaseService.getConnectedInstagramAccount(userId);
+      }
+
+      if (!targetAccount) {
+        res.json({
+          success: true,
+          media: [],
+          hasAccount: false,
+          hasToken: false,
+          message: 'No Instagram account connected yet. Connect your account first.',
+        });
+        return;
+      }
+
+      if (!targetAccount.accessToken) {
+        res.json({
+          success: true,
+          media: [],
+          hasAccount: true,
+          hasToken: false,
+          account: targetAccount,
+          message: `Account @${targetAccount.username} is connected, but Meta Access Token is required to fetch live reels from Graph API.`,
+        });
+        return;
+      }
+
+      const mediaResult = await InstagramService.getAccountMedia({
+        instagramUserId: targetAccount.instagramUserId,
+        accessToken: targetAccount.accessToken,
+        limit: 50,
+      });
+
+      res.json({
+        success: mediaResult.success,
+        media: mediaResult.media || [],
+        hasAccount: true,
+        hasToken: true,
+        account: targetAccount,
+        error: mediaResult.error,
+        message: mediaResult.success
+          ? `Successfully fetched ${mediaResult.media.length} reels and posts from @${targetAccount.username}`
+          : mediaResult.error,
+      });
+    } catch (err: any) {
+      LoggingService.error('Error fetching account media', err);
+      res.status(500).json({
+        success: false,
+        media: [],
+        error: err?.message || 'Failed to fetch Instagram media',
+      });
+    }
+  }
+);
+
+/**
+ * POST /api/instagram/clear-demo
+ * Clears demo accounts and sample automations permanently
+ */
+router.post(
+  ['/clear-demo', '/purge-demo'],
+  AuthService.requireAuth,
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const userId = req.user?.id || 'usr_default_01';
+      const result = await databaseService.clearDemoData(userId);
+      res.json({
+        success: true,
+        clearedCount: result.clearedCount,
+        message: 'All demo accounts and sample automations removed successfully.',
+      });
+    } catch (err: any) {
+      LoggingService.error('Error clearing demo data', err);
+      res.status(500).json({ error: 'Failed to clear demo data' });
+    }
+  }
+);
+
+/**
+ * DELETE /api/instagram/accounts/:id
+ */
+router.delete(
+  '/accounts/:id',
+  AuthService.requireAuth,
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const userId = req.user?.id || 'usr_default_01';
+      const deleted = await databaseService.deleteInstagramAccount(userId, req.params.id);
+      res.json({ success: deleted, message: deleted ? 'Account deleted' : 'Account not found' });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to delete account' });
+    }
+  }
+);
+
+/**
  * POST /api/instagram/disconnect or /logout
  */
 router.post(

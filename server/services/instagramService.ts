@@ -10,7 +10,7 @@
  */
 
 import { LoggingService } from './loggingService';
-import { MetaConfigStatus } from '../../shared/types';
+import { MetaConfigStatus, InstagramMediaItem } from '../../shared/types';
 import fs from 'fs';
 import path from 'path';
 
@@ -387,6 +387,83 @@ export class InstagramService {
       return {
         success: false,
         error: 'Instagram could not process this DM. Check connection and try again.',
+      };
+    }
+  }
+
+  /**
+   * ACTION 3: Fetch Live Instagram Reels & Media
+   * GET /{ig-user-id}/media?fields=id,caption,media_type,media_product_type,thumbnail_url,media_url,permalink,timestamp,like_count,comments_count
+   */
+  static async getAccountMedia(options: {
+    instagramUserId?: string;
+    accessToken?: string;
+    limit?: number;
+  }): Promise<{
+    success: boolean;
+    media: InstagramMediaItem[];
+    error?: string;
+  }> {
+    const { instagramUserId, accessToken, limit = 40 } = options;
+
+    if (!accessToken) {
+      return {
+        success: false,
+        media: [],
+        error: 'Instagram Access Token not provided. Connect via Meta OAuth or enter your Page/User Access Token in Instagram Connection.',
+      };
+    }
+
+    const targetId = instagramUserId && instagramUserId.trim() ? instagramUserId.trim() : 'me';
+
+    try {
+      const fields = 'id,caption,media_type,media_product_type,thumbnail_url,media_url,permalink,timestamp,like_count,comments_count';
+      const url = `${this.GRAPH_API_BASE}/${targetId}/media?fields=${fields}&limit=${limit}&access_token=${accessToken}`;
+      
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (!response.ok || data.error) {
+        LoggingService.error('Meta Graph API error fetching media:', data.error);
+        return {
+          success: false,
+          media: [],
+          error: data.error?.message || 'Meta Graph API returned an error fetching posts and reels.',
+        };
+      }
+
+      const rawItems: any[] = data.data || [];
+      const media: InstagramMediaItem[] = rawItems.map((item) => {
+        const isReel =
+          item.media_product_type === 'REELS' ||
+          item.media_type === 'VIDEO' ||
+          (item.permalink && item.permalink.includes('/reel/'));
+
+        return {
+          id: item.id,
+          caption: item.caption || '',
+          mediaType: item.media_type || 'IMAGE',
+          mediaProductType: item.media_product_type || (isReel ? 'REELS' : 'FEED'),
+          isReel,
+          mediaUrl: item.media_url,
+          thumbnailUrl: item.thumbnail_url || item.media_url,
+          permalink: item.permalink,
+          timestamp: item.timestamp,
+          likeCount: item.like_count ?? 0,
+          commentsCount: item.comments_count ?? 0,
+        };
+      });
+
+      return {
+        success: true,
+        media,
+      };
+    } catch (err: any) {
+      LoggingService.error('Exception fetching Instagram media from Meta', err);
+      return {
+        success: false,
+        media: [],
+        error: err?.message || 'Network error fetching media from Meta Graph API.',
       };
     }
   }

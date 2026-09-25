@@ -36,6 +36,20 @@ export interface InstagramAccount {
   updatedAt: string;
 }
 
+export interface InstagramMediaItem {
+  id: string;
+  caption?: string;
+  mediaType: 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM';
+  mediaProductType?: 'REELS' | 'FEED' | 'STORY';
+  isReel: boolean;
+  mediaUrl?: string;
+  thumbnailUrl?: string;
+  permalink?: string;
+  timestamp?: string;
+  likeCount?: number;
+  commentsCount?: number;
+}
+
 export interface AutomationActionConfig {
   id?: string;
   actionType: ActionType;

@@ -8,6 +8,7 @@ import {
   ExecutionLog,
   DashboardStats,
   InstagramAccount,
+  InstagramMediaItem,
   User,
   MetaConfigStatus,
 } from '../../shared/types';
@@ -104,6 +105,33 @@ export class ApiClient {
   // Instagram Accounts
   static async getInstagramAccounts(): Promise<{ accounts: InstagramAccount[] }> {
     return this.request('/instagram/accounts');
+  }
+
+  // Fetch Live Instagram Reels & Media
+  static async getInstagramMedia(accountId?: string): Promise<{
+    success: boolean;
+    media: InstagramMediaItem[];
+    hasAccount: boolean;
+    hasToken: boolean;
+    account?: InstagramAccount;
+    error?: string;
+    message?: string;
+  }> {
+    const query = accountId ? `?accountId=${encodeURIComponent(accountId)}` : '';
+    return this.request(`/instagram/media${query}`);
+  }
+
+  // Clear demo accounts and sample data
+  static async clearDemoAccounts(): Promise<{ success: boolean; clearedCount: number; message: string }> {
+    return this.request('/instagram/clear-demo', {
+      method: 'POST',
+    });
+  }
+
+  static async deleteInstagramAccount(accountId: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/instagram/accounts/${accountId}`, {
+      method: 'DELETE',
+    });
   }
 
   static async getMetaConfigStatus(): Promise<{ config: MetaConfigStatus }> {

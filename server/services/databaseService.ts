@@ -68,178 +68,69 @@ export class DatabaseService {
     const defaultUser: User = {
       id: 'usr_default_01',
       email: 'thevelocityexports@gmail.com',
-      fullName: 'Vajra Makuta Admin',
+      fullName: 'Velocity Exports Admin',
       avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-      createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+      createdAt: new Date().toISOString(),
     };
     this.users.set(defaultUser.id, defaultUser);
+  }
 
-    const defaultAccount: InstagramAccount = {
-      id: 'ig_acc_01',
-      userId: defaultUser.id,
-      instagramUserId: '17841400123456789',
-      username: 'vajramakutajewellers',
-      name: 'Vajra Makuta Jewellers',
-      profilePictureUrl: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=150&q=80',
-      isConnected: true,
-      connectedAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    this.accounts.set(defaultAccount.id, defaultAccount);
-
-    const auto1: Automation = {
-      id: 'auto_price_01',
-      userId: defaultUser.id,
-      instagramAccountId: defaultAccount.id,
-      name: 'Auto-DM links from comments',
-      isActive: true,
-      triggerType: 'comment',
-      targetPostType: 'specific',
-      targetPostId: 'post_bangles_reel_99',
-      targetPostCaption: 'PAIR BANGLES - Festive Season Jewellery',
-      matchType: 'contains',
-      keywords: ['Price', 'Link', 'Shop', 'ORDER', 'Cost'],
-      actions: [
-        {
-          id: 'act_pub_1',
-          actionType: 'public_reply',
-          messageTemplate: 'Thanks for your interest! 👋 Check your DM for details.',
-          isEnabled: true,
-        },
-        {
-          id: 'act_dm_1',
-          actionType: 'private_dm',
-          messageTemplate: `✨ **Black Beads Bracelet** ✨\n\nElegant Black Beads Bracelet with a simple and stylish design, perfect for everyday wear and traditional looks. 🖤✨\n\n📦 **Available for Order**\n💬 Reply **'ORDER'** to know the price and details.\n🛍️ Check the link below to order online:\n\n📞 **For Orders & Enquiries:**\n9642064207`,
-          linkUrl: 'https://vajramakutajewellers.com/products/black-beads-bracelet',
-          linkButtonText: 'Order Now',
-          isEnabled: true,
-        },
-      ],
-      createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-      updatedAt: new Date().toISOString(),
-      lastActivityAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
-      stats: {
-        commentsMatched: 42,
-        repliesSent: 42,
-        dmsSent: 42,
-      },
-    };
-
-    const auto2: Automation = {
-      id: 'auto_bangles_02',
-      userId: defaultUser.id,
-      instagramAccountId: defaultAccount.id,
-      name: 'Pair Bangles Collection Link',
-      isActive: true,
-      triggerType: 'comment',
-      targetPostType: 'specific',
-      targetPostId: 'post_bangles_reel_99',
-      targetPostCaption: 'Festive Season Pair Bangles Collection - Handcrafted 22K Gold',
-      matchType: 'contains',
-      keywords: ['LINK', 'SEND LINK', 'BUY', 'DETAILS', 'SHOP'],
-      actions: [
-        {
-          id: 'act_pub_2',
-          actionType: 'public_reply',
-          messageTemplate: 'Sent directly to your inbox! ✨ Please check your DM.',
-          isEnabled: true,
-        },
-        {
-          id: 'act_dm_2',
-          actionType: 'private_dm',
-          messageTemplate: 'Hey there! So happy you loved the Pair Bangles collection ✨\nHere is your exclusive link with 10% discount code applied:',
-          linkUrl: 'https://example.com/festive-bangles',
-          linkButtonText: 'Shop Bangles',
-          isEnabled: true,
-        },
-      ],
-      createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-      updatedAt: new Date().toISOString(),
-      lastActivityAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-      stats: {
-        commentsMatched: 18,
-        repliesSent: 18,
-        dmsSent: 18,
-      },
-    };
-
-    this.automations.set(auto1.id, auto1);
-    this.automations.set(auto2.id, auto2);
-
-    // Initial logs for rich activity view
-    this.logs.push(
-      {
-        id: 'log_01',
-        userId: defaultUser.id,
-        automationId: auto1.id,
-        automationName: auto1.name,
-        instagramAccountId: defaultAccount.id,
-        instagramUserId: 'user_priya_44',
-        username: 'priya_sharma',
-        commentId: 'comment_meta_1001',
-        commentText: 'PRICE PLEASE for this gold necklace??',
-        matchedKeyword: 'PRICE',
-        actionType: 'private_dm',
-        actionStatus: 'success',
-        metaResponse: { message_id: 'mid_meta_dm_991' },
-        isTestEvent: false,
-        createdAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
-      },
-      {
-        id: 'log_02',
-        userId: defaultUser.id,
-        automationId: auto1.id,
-        automationName: auto1.name,
-        instagramAccountId: defaultAccount.id,
-        instagramUserId: 'user_priya_44',
-        username: 'priya_sharma',
-        commentId: 'comment_meta_1001',
-        commentText: 'PRICE PLEASE for this gold necklace??',
-        matchedKeyword: 'PRICE',
-        actionType: 'public_reply',
-        actionStatus: 'success',
-        metaResponse: { comment_id: 'reply_meta_882' },
-        isTestEvent: false,
-        createdAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
-      },
-      {
-        id: 'log_03',
-        userId: defaultUser.id,
-        automationId: auto2.id,
-        automationName: auto2.name,
-        instagramAccountId: defaultAccount.id,
-        instagramUserId: 'user_kiran_89',
-        username: 'kiran.patel',
-        commentId: 'comment_meta_1002',
-        commentText: 'Please send link to order bangles!',
-        matchedKeyword: 'LINK',
-        actionType: 'private_dm',
-        actionStatus: 'success',
-        metaResponse: { message_id: 'mid_meta_dm_992' },
-        isTestEvent: false,
-        createdAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-      },
-      {
-        id: 'log_04',
-        userId: defaultUser.id,
-        automationId: undefined,
-        automationName: undefined,
-        instagramAccountId: defaultAccount.id,
-        instagramUserId: 'user_ananya_07',
-        username: 'ananya_creatives',
-        commentId: 'comment_meta_1003',
-        commentText: 'Stunning craftsmanship as always ❤️',
-        matchedKeyword: undefined,
-        actionType: 'no_match',
-        actionStatus: 'skipped',
-        isTestEvent: false,
-        createdAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+  public async clearDemoData(userId: string = 'usr_default_01'): Promise<{ success: boolean; clearedCount: number }> {
+    let cleared = 0;
+    // Clear from in-memory store
+    for (const [id, acc] of Array.from(this.accounts.entries())) {
+      if (
+        acc.username.toLowerCase().includes('vajra') ||
+        acc.id === 'ig_acc_01' ||
+        acc.name.toLowerCase().includes('vajra')
+      ) {
+        this.accounts.delete(id);
+        cleared++;
       }
+    }
+    for (const [id, auto] of Array.from(this.automations.entries())) {
+      if (
+        auto.id.startsWith('auto_price_01') ||
+        auto.id.startsWith('auto_bangles_02') ||
+        auto.name.toLowerCase().includes('bangles') ||
+        auto.instagramAccountId === 'ig_acc_01'
+      ) {
+        this.automations.delete(id);
+        cleared++;
+      }
+    }
+    this.logs = this.logs.filter(
+      (l) => !l.username?.toLowerCase().includes('priya') && !l.username?.toLowerCase().includes('kiran') && l.instagramAccountId !== 'ig_acc_01'
     );
 
-    this.processedEvents.add('comment_meta_1001');
-    this.processedEvents.add('comment_meta_1002');
-    this.processedEvents.add('comment_meta_1003');
+    // Also clear from Supabase if connected
+    if (this.ensureClient() && this.supabase) {
+      try {
+        await this.supabase.from('instagram_accounts').delete().or(`username.ilike.%vajra%,name.ilike.%vajra%,id.eq.ig_acc_01`);
+        await this.supabase.from('automations').delete().or(`name.ilike.%bangles%,id.eq.auto_price_01,id.eq.auto_bangles_02`);
+        await this.supabase.from('logs').delete().or(`username.eq.priya_sharma,username.eq.kiran.patel`);
+      } catch (err) {
+        LoggingService.warn('Could not delete demo data in Supabase table:', err);
+      }
+    }
+    return { success: true, clearedCount: cleared };
+  }
+
+  // Delete Instagram Account permanently
+  async deleteInstagramAccount(userId: string, accountId: string): Promise<boolean> {
+    const acc = this.accounts.get(accountId);
+    if (acc && acc.userId === userId) {
+      this.accounts.delete(accountId);
+      if (this.isUsingSupabase && this.supabase) {
+        try {
+          await this.supabase.from('instagram_accounts').delete().eq('id', accountId).eq('user_id', userId);
+        } catch (e) {
+          LoggingService.error('Failed to delete account from Supabase', e);
+        }
+      }
+      return true;
+    }
+    return false;
   }
 
   // Idempotency: Check if comment event was already processed
