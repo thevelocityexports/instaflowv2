@@ -11,10 +11,12 @@ import {
   HelpCircle,
   PanelLeftClose,
   Sparkles,
+  Instagram,
+  Radio,
 } from 'lucide-react';
 import { InstagramAccount } from '../../shared/types';
 
-export type NavTab = 'home' | 'contacts' | 'automations' | 'ai' | 'inbox' | 'settings' | 'instagram';
+export type NavTab = 'home' | 'contacts' | 'automations' | 'ai' | 'inbox' | 'instagram' | 'settings';
 
 interface SidebarProps {
   activeTab: NavTab;
@@ -30,9 +32,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenTestModal,
 }) => {
   const navItems = [
+    { id: 'automations' as NavTab, label: 'Automation', icon: GitBranch },
+    { id: 'instagram' as NavTab, label: 'Connect Instagram', icon: Instagram, highlight: true },
     { id: 'home' as NavTab, label: 'Home', icon: Home },
     { id: 'contacts' as NavTab, label: 'Contacts', icon: Users },
-    { id: 'automations' as NavTab, label: 'Automation', icon: GitBranch },
     { id: 'ai' as NavTab, label: 'instaflow AI', icon: Bot },
     { id: 'inbox' as NavTab, label: 'Inbox', icon: MessageCircle, badge: '1848' },
     { id: 'settings' as NavTab, label: 'Settings', icon: Settings },

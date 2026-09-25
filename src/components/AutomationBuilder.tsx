@@ -28,6 +28,7 @@ import {
   CheckCircle2,
   X,
   SlidersHorizontal,
+  Instagram,
 } from 'lucide-react';
 import {
   Automation,
@@ -43,6 +44,7 @@ interface AutomationBuilderProps {
   onCancel: () => void;
   connectedAccount?: InstagramAccount | null;
   connectedAccountUsername?: string;
+  onNavigateToInstagram?: () => void;
 }
 
 export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
@@ -51,6 +53,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   onCancel,
   connectedAccount,
   connectedAccountUsername,
+  onNavigateToInstagram,
 }) => {
   const activeUsername =
     connectedAccount?.username ||
@@ -261,6 +264,15 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2.5">
+          {onNavigateToInstagram && (
+            <button
+              onClick={onNavigateToInstagram}
+              className="px-3 py-1.5 bg-gradient-to-r from-amber-500 via-rose-500 to-purple-600 hover:opacity-95 text-white rounded-lg text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5"
+            >
+              <Instagram className="w-3.5 h-3.5" />
+              <span>Connect / Switch IG</span>
+            </button>
+          )}
           <button
             onClick={onCancel}
             className="px-4 py-1.5 bg-white border border-[#d1d5db] hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg transition-colors"

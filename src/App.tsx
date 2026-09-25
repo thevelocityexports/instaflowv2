@@ -208,6 +208,7 @@ export default function App() {
                 onCancel={() => setAutomationsView('list')}
                 connectedAccount={connectedAccount}
                 connectedAccountUsername={connectedAccount?.username || 'thevelocityexports'}
+                onNavigateToInstagram={() => setActiveTab('instagram')}
               />
             ) : (
               <div className="flex-1 overflow-y-auto">
