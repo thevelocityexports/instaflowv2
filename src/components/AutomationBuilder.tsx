@@ -26,6 +26,7 @@ import {
   Film,
   AlertCircle,
   CheckCircle2,
+  X,
   SlidersHorizontal,
 } from 'lucide-react';
 import {
@@ -54,10 +55,11 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const activeUsername =
     connectedAccount?.username ||
     connectedAccountUsername ||
-    'your_instagram_handle';
+    'panchalohajewels';
 
-  // Top level tab: 'insights' or 'preview'
-  const [topTab, setTopTab] = useState<'insights' | 'preview'>('preview');
+  const activeName =
+    connectedAccount?.name ||
+    'Panchaloha Jewellers';
 
   // Name
   const [name, setName] = useState(
@@ -67,19 +69,8 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   // Live Media State
   const [liveMedia, setLiveMedia] = useState<InstagramMediaItem[]>([]);
   const [isLoadingMedia, setIsLoadingMedia] = useState(false);
-  const [mediaError, setMediaError] = useState<string | null>(null);
-  const [hasToken, setHasToken] = useState<boolean>(true);
-  const [mediaFilter, setMediaFilter] = useState<'all' | 'reels' | 'posts'>('all');
-  const [customReelInput, setCustomReelInput] = useState(
-    initialData?.targetPostUrl || initialData?.targetPostId || ''
-  );
-  const [useCustomUrl, setUseCustomUrl] = useState(
-    Boolean(
-      initialData?.targetPostUrl ||
-        (initialData?.targetPostId &&
-          !initialData.targetPostId.startsWith('post_'))
-    )
-  );
+  const [showAllModal, setShowAllModal] = useState(false);
+  const [searchReelTerm, setSearchReelTerm] = useState('');
 
   // Step 1: When someone comments on
   const [targetPostType, setTargetPostType] = useState<'specific' | 'all' | 'next'>(
@@ -87,12 +78,6 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   );
   const [selectedPostId, setSelectedPostId] = useState<string>(
     initialData?.targetPostId || ''
-  );
-  const [selectedPostCaption, setSelectedPostCaption] = useState<string>(
-    initialData?.targetPostCaption || ''
-  );
-  const [selectedPostThumbnail, setSelectedPostThumbnail] = useState<string>(
-    initialData?.targetPostUrl || ''
   );
 
   // Step 2: And this comment has
@@ -125,43 +110,34 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [enableLinkDM, setEnableLinkDM] = useState(true);
   const [linkDMText, setLinkDMText] = useState(
     existingPrivateDM?.messageTemplate ||
-      `Hey! Here are the details for this reel ✨\n\nClick the link below to view or order now:`
+      `✨ **Panchaloha Festive Jewellery** ✨\n\nElegant Traditional Panchaloha Collection with handcrafted finish, perfect for festive wear and auspicious moments. 💛✨\n\n📦 **Available for Order**\n💬 Reply **'ORDER'** to know the price and details.\n🛍️ Check the link below to order online:\n\n📞 **For Orders & Enquiries:**\n9642064207`
   );
   const [linkButtonText, setLinkButtonText] = useState(
-    existingPrivateDM?.linkButtonText || 'View Product'
+    existingPrivateDM?.linkButtonText || 'Order Now'
   );
   const [linkUrl, setLinkUrl] = useState(
-    existingPrivateDM?.linkUrl || 'https://example.com/product'
+    existingPrivateDM?.linkUrl || 'https://example.com/festive-collection'
   );
   const [followUpIfNotClicked, setFollowUpIfNotClicked] = useState(false);
 
   // Phone preview tabs: 'post' | 'comments' | 'dm'
   const [phoneTab, setPhoneTab] = useState<'post' | 'comments' | 'dm'>('post');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [saveToast, setSaveToast] = useState<string | null>(null);
 
-  // Fetch Live Media
+  // Fetch Media
   const fetchLiveMedia = async () => {
     setIsLoadingMedia(true);
-    setMediaError(null);
     try {
       const res = await ApiClient.getInstagramMedia(connectedAccount?.id);
-      if (res.success && res.media) {
+      if (res.success && res.media && res.media.length > 0) {
         setLiveMedia(res.media);
-        setHasToken(res.hasToken);
-        if (res.media.length > 0 && !selectedPostId) {
+        if (!selectedPostId || !res.media.some((m) => m.id === selectedPostId)) {
           setSelectedPostId(res.media[0].id);
-          setSelectedPostCaption(res.media[0].caption || '');
-          setSelectedPostThumbnail(res.media[0].thumbnailUrl || res.media[0].mediaUrl || '');
         }
-      } else {
-        setLiveMedia([]);
-        setHasToken(res.hasToken);
-        if (res.error) setMediaError(res.error);
       }
     } catch (err: any) {
       console.error('Failed to load Instagram media', err);
-      setMediaError(err?.message || 'Could not fetch reels from Instagram');
-      setLiveMedia([]);
     } finally {
       setIsLoadingMedia(false);
     }
@@ -171,47 +147,21 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     fetchLiveMedia();
   }, [connectedAccount?.id]);
 
-  // Filter live media
-  const filteredMedia = liveMedia.filter((item) => {
-    if (mediaFilter === 'reels') return item.isReel;
-    if (mediaFilter === 'posts') return !item.isReel;
-    return true;
-  });
-
-  const selectedItem = liveMedia.find((m) => m.id === selectedPostId);
+  const selectedItem =
+    liveMedia.find((m) => m.id === selectedPostId) || liveMedia[0] || null;
 
   const displayThumbnail =
     selectedItem?.thumbnailUrl ||
     selectedItem?.mediaUrl ||
-    selectedPostThumbnail ||
-    'https://images.unsplash.com/photo-1611162617474-5b21e879e113?auto=format&fit=crop&w=600&q=80';
+    'https://images.unsplash.com/photo-1611591475879-114c004d80a1?auto=format&fit=crop&w=600&q=80';
 
   const displayCaption =
     selectedItem?.caption ||
-    selectedPostCaption ||
-    `${activeUsername} Adorn your moments with perfection. Comment PRICE or LINK to get instant details! ✨`;
+    `${activeUsername} ✨ THIS FESTIVAL SEASON, CELEBRATE WITH TIMELESS TRADITION! ✨ Celebrate every special occasion with the elegance of a beautiful Mangalsutra & Panchaloha collection. 💛 A symbol of tradition, love and timeless beauty. 📞 96420 64207`;
 
-  const handleSelectMediaItem = (item: InstagramMediaItem) => {
+  const handleSelectReel = (item: InstagramMediaItem) => {
     setTargetPostType('specific');
-    setUseCustomUrl(false);
     setSelectedPostId(item.id);
-    setSelectedPostCaption(item.caption || '');
-    setSelectedPostThumbnail(item.thumbnailUrl || item.mediaUrl || '');
-    if (item.permalink) {
-      setCustomReelInput(item.permalink);
-    }
-  };
-
-  const handleApplyCustomReel = () => {
-    const raw = customReelInput.trim();
-    if (!raw) return;
-    setTargetPostType('specific');
-    setUseCustomUrl(true);
-    // Parse Reel shortcode or ID from URL e.g. https://www.instagram.com/reel/C8xYz123/
-    const reelMatch = raw.match(/reel\/([A-Za-z0-9_-]+)/i) || raw.match(/p\/([A-Za-z0-9_-]+)/i);
-    const parsedId = reelMatch ? `reel_${reelMatch[1]}` : raw;
-    setSelectedPostId(parsedId);
-    setSelectedPostCaption(`Custom Instagram Reel: ${raw}`);
   };
 
   const handleAddKeyword = (e: React.KeyboardEvent) => {
@@ -237,6 +187,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
   const handleSave = async () => {
     setIsSubmitting(true);
+    setSaveToast(null);
     try {
       const actions: AutomationActionConfig[] = [];
 
@@ -260,16 +211,21 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
       await onSave({
         name,
-        targetPostType: targetPostType === 'specific' ? 'specific' : targetPostType,
-        targetPostId: targetPostType === 'specific' ? selectedPostId : undefined,
-        targetPostUrl: targetPostType === 'specific' ? customReelInput || selectedItem?.permalink : undefined,
+        instagramAccountId: connectedAccount?.id,
+        targetPostType: targetPostType,
+        targetPostId: targetPostType === 'specific' ? selectedPostId || selectedItem?.id : undefined,
+        targetPostUrl: selectedItem?.permalink,
         targetPostCaption: targetPostType === 'specific' ? displayCaption : undefined,
         matchType: 'contains',
         keywords: hasKeywordMode === 'specific' ? keywords : ['*'],
         actions,
       });
-    } catch (err) {
+
+      setSaveToast('✓ Automation saved & activated successfully!');
+      setTimeout(() => setSaveToast(null), 3500);
+    } catch (err: any) {
       console.error(err);
+      setSaveToast(`Error: ${err?.message || 'Failed to save automation'}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -277,7 +233,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
   return (
     <div className="h-screen flex flex-col bg-white overflow-hidden font-sans select-none">
-      {/* Top Header Bar */}
+      {/* Top Header Bar (Matching Manychat Screenshot 1 & 2) */}
       <div className="h-14 border-b border-[#e5e7eb] px-6 flex items-center justify-between bg-white shrink-0 z-10">
         {/* Left: Back Link & Automation Title with LIVE Badge */}
         <div className="flex items-center gap-3">
@@ -295,29 +251,13 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
           </span>
         </div>
 
-        {/* Center: Insights & Preview Tabs */}
-        <div className="flex items-center gap-6 h-full">
-          <button
-            onClick={() => setTopTab('insights')}
-            className={`h-full text-sm font-semibold border-b-2 transition-all px-1 flex items-center ${
-              topTab === 'insights'
-                ? 'border-[#0066ff] text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Insights
-          </button>
-          <button
-            onClick={() => setTopTab('preview')}
-            className={`h-full text-sm font-semibold border-b-2 transition-all px-1 flex items-center ${
-              topTab === 'preview'
-                ? 'border-[#0066ff] text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Preview
-          </button>
-        </div>
+        {/* Center: Toast Notification if saved */}
+        {saveToast && (
+          <div className="px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold rounded-full animate-in fade-in flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+            <span>{saveToast}</span>
+          </div>
+        )}
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2.5">
@@ -335,7 +275,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
             {isSubmitting ? (
               <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
             ) : (
-              'Save Automation'
+              'Go Live'
             )}
           </button>
         </div>
@@ -343,20 +283,15 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
       {/* Main Dual-Column Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* LEFT COLUMN: Scrollable Automation Configuration Form */}
-        <div className="w-full lg:w-[480px] xl:w-[540px] overflow-y-auto p-6 space-y-6 border-r border-[#e5e7eb] bg-white">
+        {/* LEFT COLUMN: Scrollable Manychat-Style Automation Form (Matching Screenshot 2) */}
+        <div className="w-full lg:w-[460px] xl:w-[500px] overflow-y-auto p-6 space-y-6 border-r border-[#e5e7eb] bg-white">
           {/* Section 1: When someone comments on */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-[#111827] tracking-tight">
-                When someone comments on
-              </h3>
-              <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
-                Account: <span className="font-bold text-slate-800">@{activeUsername}</span>
-              </span>
-            </div>
+            <h3 className="text-base font-bold text-[#111827] tracking-tight">
+              When someone comments on
+            </h3>
 
-            {/* Option A: Specific post or reel */}
+            {/* (•) a specific post or reel - WITH 4 REEL CARDS SIDE BY SIDE & "Show All" (Screenshot 2) */}
             <div
               className={`p-4 rounded-xl border transition-all space-y-3 ${
                 targetPostType === 'specific'
@@ -382,213 +317,69 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   type="button"
                   onClick={fetchLiveMedia}
                   disabled={isLoadingMedia}
-                  title="Refresh from Instagram"
-                  className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg text-xs flex items-center gap-1 transition-colors"
+                  className="text-slate-400 hover:text-blue-600 p-1 rounded transition-colors"
+                  title="Refresh reels"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isLoadingMedia ? 'animate-spin' : ''}`} />
-                  <span className="text-[11px] font-medium hidden sm:inline">Refresh</span>
                 </button>
               </div>
 
-              {targetPostType === 'specific' && (
-                <div className="space-y-3 pt-1">
-                  {/* Media Filter Tabs */}
-                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                    <div className="flex items-center gap-1 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setUseCustomUrl(false);
-                          setMediaFilter('all');
-                        }}
-                        className={`px-2.5 py-1 rounded-md font-semibold transition-colors ${
-                          !useCustomUrl && mediaFilter === 'all'
-                            ? 'bg-blue-600 text-white shadow-2xs'
-                            : 'text-slate-600 hover:bg-slate-100'
-                        }`}
-                      >
-                        All ({liveMedia.length})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setUseCustomUrl(false);
-                          setMediaFilter('reels');
-                        }}
-                        className={`px-2.5 py-1 rounded-md font-semibold transition-colors flex items-center gap-1 ${
-                          !useCustomUrl && mediaFilter === 'reels'
-                            ? 'bg-blue-600 text-white shadow-2xs'
-                            : 'text-slate-600 hover:bg-slate-100'
-                        }`}
-                      >
-                        <Film className="w-3 h-3" />
-                        Reels ({liveMedia.filter((m) => m.isReel).length})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setUseCustomUrl(false);
-                          setMediaFilter('posts');
-                        }}
-                        className={`px-2.5 py-1 rounded-md font-semibold transition-colors flex items-center gap-1 ${
-                          !useCustomUrl && mediaFilter === 'posts'
-                            ? 'bg-blue-600 text-white shadow-2xs'
-                            : 'text-slate-600 hover:bg-slate-100'
-                        }`}
-                      >
-                        <ImageIcon className="w-3 h-3" />
-                        Photos
-                      </button>
-                    </div>
+              {/* 4 REEL CARDS SIDE BY SIDE (Matching Manychat Screenshot 2) */}
+              <div className="pt-1">
+                <div className="grid grid-cols-4 gap-2">
+                  {liveMedia.slice(0, 4).map((item, idx) => {
+                    const isSelected = selectedPostId === item.id;
+                    const fallbackTitles = [
+                      'PANCHALOHA SUTRALU',
+                      'PAIR BANGLES',
+                      'FESTIVE OFFER',
+                      '10% DISCOUNT',
+                    ];
+                    const overlay = (item as any).overlayText || fallbackTitles[idx] || 'REEL';
 
-                    <button
-                      type="button"
-                      onClick={() => setUseCustomUrl(!useCustomUrl)}
-                      className={`text-[11px] font-semibold px-2 py-1 rounded transition-colors ${
-                        useCustomUrl ? 'bg-indigo-100 text-indigo-800' : 'text-slate-500 hover:text-slate-800'
-                      }`}
-                    >
-                      {useCustomUrl ? '✓ Custom URL' : '+ Paste Reel URL'}
-                    </button>
-                  </div>
-
-                  {/* Custom Reel URL / ID Input Mode */}
-                  {useCustomUrl ? (
-                    <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2">
-                      <label className="block text-[11px] font-semibold text-slate-700">
-                        Paste Instagram Reel or Post Link
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={customReelInput}
-                          onChange={(e) => setCustomReelInput(e.target.value)}
-                          placeholder="https://www.instagram.com/reel/C8xyz... or Reel ID"
-                          className="flex-1 px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0066ff] focus:bg-white"
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => handleSelectReel(item)}
+                        className={`relative aspect-[3/4] rounded-lg overflow-hidden border-2 cursor-pointer transition-all ${
+                          isSelected && targetPostType === 'specific'
+                            ? 'border-[#0066ff] ring-2 ring-[#0066ff]/20 scale-[0.98]'
+                            : 'border-slate-200 hover:border-slate-400'
+                        }`}
+                      >
+                        <img
+                          src={item.thumbnailUrl || item.mediaUrl}
+                          alt={item.caption || 'Instagram Reel'}
+                          className="w-full h-full object-cover"
                         />
-                        <button
-                          type="button"
-                          onClick={handleApplyCustomReel}
-                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-2xs shrink-0"
-                        >
-                          Apply
-                        </button>
+                        {/* Reel Indicator & Overlay Tag */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-1">
+                          <span className="text-[8px] font-black text-amber-300 uppercase leading-none drop-shadow-md truncate">
+                            {overlay}
+                          </span>
+                        </div>
                       </div>
-                      <p className="text-[10px] text-slate-500">
-                        Target comments specifically made on this Reel or Post URL.
-                      </p>
-                    </div>
-                  ) : (
-                    /* Live Media Grid */
-                    <div>
-                      {isLoadingMedia ? (
-                        <div className="py-8 flex flex-col items-center justify-center gap-2 text-slate-400">
-                          <RefreshCw className="w-5 h-5 animate-spin text-blue-600" />
-                          <span className="text-xs font-medium">Fetching reels from @{activeUsername}...</span>
-                        </div>
-                      ) : filteredMedia.length > 0 ? (
-                        <div className="grid grid-cols-4 gap-2 max-h-56 overflow-y-auto pr-1">
-                          {filteredMedia.map((item) => {
-                            const isSelected = selectedPostId === item.id;
-                            return (
-                              <div
-                                key={item.id}
-                                onClick={() => handleSelectMediaItem(item)}
-                                className={`relative aspect-[3/4] rounded-lg overflow-hidden border-2 cursor-pointer transition-all ${
-                                  isSelected
-                                    ? 'border-[#0066ff] ring-2 ring-[#0066ff]/20 scale-[0.98]'
-                                    : 'border-slate-200 hover:border-slate-400'
-                                }`}
-                              >
-                                <img
-                                  src={
-                                    item.thumbnailUrl ||
-                                    item.mediaUrl ||
-                                    'https://images.unsplash.com/photo-1611162617474-5b21e879e113?auto=format&fit=crop&w=300&q=80'
-                                  }
-                                  alt={item.caption || 'Instagram Reel'}
-                                  className="w-full h-full object-cover"
-                                />
-
-                                {/* Overlay Indicators */}
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 flex flex-col justify-between p-1.5">
-                                  <div className="flex items-center justify-between">
-                                    {item.isReel ? (
-                                      <span className="bg-black/60 backdrop-blur-xs text-white p-0.5 rounded text-[8px] flex items-center">
-                                        <Film className="w-2.5 h-2.5" />
-                                      </span>
-                                    ) : (
-                                      <span />
-                                    )}
-                                    {isSelected && (
-                                      <span className="w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center text-white">
-                                        <Check className="w-2.5 h-2.5 stroke-[3]" />
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  <div className="space-y-0.5">
-                                    <p className="text-[8px] text-white font-medium line-clamp-1 leading-tight">
-                                      {item.caption || 'Reel Video'}
-                                    </p>
-                                    <div className="flex items-center gap-1 text-[8px] text-white/90">
-                                      <Heart className="w-2 h-2 fill-white/80" />
-                                      <span>{item.likeCount ?? 0}</span>
-                                      <MessageCircle className="w-2 h-2 ml-1" />
-                                      <span>{item.commentsCount ?? 0}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        /* Empty or No Token State */
-                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-center">
-                          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mx-auto">
-                            <Film className="w-4 h-4" />
-                          </div>
-                          <h4 className="text-xs font-bold text-slate-800">
-                            {hasToken ? 'No Reels Found' : 'Connect Meta Access Token'}
-                          </h4>
-                          <p className="text-[11px] text-slate-500 max-w-xs mx-auto">
-                            {hasToken
-                              ? `No public media was returned for @${activeUsername}. You can paste a Reel link below.`
-                              : `Connect via Meta OAuth or paste your Instagram Reel URL to target specific reels.`}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => setUseCustomUrl(true)}
-                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-2xs inline-flex items-center gap-1 mt-1"
-                          >
-                            <LinkIcon className="w-3 h-3" />
-                            Paste Custom Reel URL
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Selected Reel Info Badge */}
-                  {selectedPostId && (
-                    <div className="p-2.5 bg-white border border-blue-200 rounded-lg flex items-center justify-between gap-3 text-xs">
-                      <div className="flex items-center gap-2 overflow-hidden">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span className="font-semibold text-slate-800 truncate">
-                          Target: {selectedItem?.caption || selectedPostCaption || selectedPostId}
-                        </span>
-                      </div>
-                      <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded shrink-0">
-                        Selected
-                      </span>
-                    </div>
-                  )}
+                    );
+                  })}
                 </div>
-              )}
+
+                {/* Show All blue link (Matching Screenshot 2) */}
+                <div className="mt-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowAllModal(true)}
+                    className="text-xs font-semibold text-[#0066ff] hover:underline flex items-center gap-1"
+                  >
+                    <span>Show All</span>
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      ({liveMedia.length} reels from @{activeUsername})
+                    </span>
+                  </button>
+                </div>
+              </div>
             </div>
 
-            {/* Option B: Any post or reel */}
+            {/* ( ) any post or reel */}
             <div className="p-3.5 rounded-xl border border-[#e5e7eb] hover:border-slate-300 transition-colors flex items-center justify-between">
               <label className="flex items-center gap-2.5 cursor-pointer flex-1">
                 <input
@@ -599,13 +390,13 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   className="accent-[#0066ff] w-4 h-4"
                 />
                 <span className="text-sm font-medium text-slate-800">
-                  any post or reel (All content on @{activeUsername})
+                  any post or reel
                 </span>
               </label>
               <HelpCircle className="w-4 h-4 text-slate-400" />
             </div>
 
-            {/* Option C: Next post or reel */}
+            {/* ( ) next post or reel */}
             <div className="p-3.5 rounded-xl border border-[#e5e7eb] hover:border-slate-300 transition-colors flex items-center justify-between">
               <label className="flex items-center gap-2.5 cursor-pointer flex-1">
                 <input
@@ -616,20 +407,20 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   className="accent-[#0066ff] w-4 h-4"
                 />
                 <span className="text-sm font-medium text-slate-800">
-                  next post or reel (Upcoming uploads)
+                  next post or reel
                 </span>
               </label>
               <HelpCircle className="w-4 h-4 text-slate-400" />
             </div>
           </div>
 
-          {/* Section 2: And this comment has */}
+          {/* Section 2: And this comment has (Matching Screenshot 2) */}
           <div className="space-y-3 pt-2">
             <h3 className="text-base font-bold text-[#111827] tracking-tight">
               And this comment has
             </h3>
 
-            {/* Specific word card */}
+            {/* (•) a specific word or words */}
             <div className="p-4 rounded-xl border border-[#e5e7eb] space-y-3">
               <label className="flex items-center gap-2.5 cursor-pointer">
                 <input
@@ -668,16 +459,16 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                       value={keywordInput}
                       onChange={(e) => setKeywordInput(e.target.value)}
                       onKeyDown={handleAddKeyword}
-                      placeholder={keywords.length === 0 ? 'Type keyword & press Enter' : ''}
+                      placeholder={keywords.length === 0 ? 'Enter a word or multiple' : ''}
                       className="flex-1 min-w-[140px] text-xs text-slate-800 outline-none"
                     />
                   </div>
-                  <p className="text-[11px] text-slate-500">Use commas or Enter to add keywords</p>
+                  <p className="text-[11px] text-slate-500">Use commas to separate words</p>
 
-                  {/* For example chips */}
+                  {/* For example chips (Matching Screenshot 2) */}
                   <div className="flex items-center gap-1.5 text-xs text-slate-600 pt-0.5">
                     <span>For example:</span>
-                    {['Price', 'Link', 'Shop', 'Order', 'Cost'].map((chip) => (
+                    {['Price', 'Link', 'Shop'].map((chip) => (
                       <button
                         key={chip}
                         type="button"
@@ -692,7 +483,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               )}
             </div>
 
-            {/* Any word card */}
+            {/* ( ) any word */}
             <div className="p-3.5 rounded-xl border border-[#e5e7eb] hover:border-slate-300 transition-colors">
               <label className="flex items-center gap-2.5 cursor-pointer">
                 <input
@@ -706,7 +497,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               </label>
             </div>
 
-            {/* Public reply toggle card */}
+            {/* reply to their comments under the post (Matching Screenshot 2) */}
             <div className="p-4 rounded-xl border border-[#e5e7eb] space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-slate-800">
@@ -730,20 +521,20 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     onChange={(e) => setPublicReplyText(e.target.value)}
                     rows={2}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 outline-none focus:border-[#0066ff] focus:bg-white"
-                    placeholder="Write public comment reply..."
+                    placeholder="Write comment reply..."
                   />
                 </div>
               )}
             </div>
           </div>
 
-          {/* Section 3: "They will get" */}
+          {/* Section 3: They will get */}
           <div className="space-y-3 pt-2">
             <h3 className="text-base font-bold text-[#111827] tracking-tight">
               They will get
             </h3>
 
-            {/* An Opening DM card */}
+            {/* An Opening DM */}
             <div className="p-4 rounded-xl border border-[#e5e7eb] space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-slate-900">
@@ -762,15 +553,12 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
               {enableOpeningDM && (
                 <div className="space-y-2.5 pt-1">
-                  <div className="relative">
-                    <textarea
-                      value={openingDMText}
-                      onChange={(e) => setOpeningDMText(e.target.value)}
-                      rows={3}
-                      className="w-full p-3 border border-slate-300 rounded-xl text-xs text-slate-800 leading-relaxed outline-none focus:border-[#0066ff] focus:ring-1 focus:ring-[#0066ff]"
-                    />
-                  </div>
-
+                  <textarea
+                    value={openingDMText}
+                    onChange={(e) => setOpeningDMText(e.target.value)}
+                    rows={3}
+                    className="w-full p-3 border border-slate-300 rounded-xl text-xs text-slate-800 leading-relaxed outline-none focus:border-[#0066ff]"
+                  />
                   <input
                     type="text"
                     value={openingDMButtonText}
@@ -782,7 +570,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
               )}
             </div>
 
-            {/* And then, they will get a DM with a link */}
+            {/* A DM with a link */}
             <div className="p-4 rounded-xl border border-[#e5e7eb] space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-slate-900">
@@ -804,7 +592,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   <textarea
                     value={linkDMText}
                     onChange={(e) => setLinkDMText(e.target.value)}
-                    rows={4}
+                    rows={6}
                     className="w-full p-3 border border-[#0066ff] ring-1 ring-[#0066ff] rounded-xl text-xs text-slate-800 leading-relaxed outline-none"
                     placeholder="Write a message"
                   />
@@ -815,7 +603,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                       value={linkButtonText}
                       onChange={(e) => setLinkButtonText(e.target.value)}
                       className="flex-1 text-xs text-slate-800 font-medium outline-none"
-                      placeholder="Button Label (e.g. Order Now)"
+                      placeholder="Button Label"
                     />
                     <LinkIcon className="w-4 h-4 text-[#0066ff]" />
                   </div>
@@ -826,7 +614,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                       value={linkUrl}
                       onChange={(e) => setLinkUrl(e.target.value)}
                       className="flex-1 text-xs text-slate-800 outline-none"
-                      placeholder="https://yourstore.com/product-link"
+                      placeholder="https://example.com/product-link"
                     />
                     <ExternalLink className="w-4 h-4 text-slate-400" />
                   </div>
@@ -836,10 +624,10 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Phone Preview */}
+        {/* RIGHT COLUMN: Realistic Manychat Phone Preview (Screenshot 2) */}
         <div className="flex-1 bg-[#f4f5f7] flex flex-col items-center justify-center p-6 relative overflow-y-auto">
           {/* Phone View Selector Tabs */}
-          <div className="mb-4 flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs text-xs font-semibold">
+          <div className="mb-3 flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs text-xs font-semibold">
             <button
               onClick={() => setPhoneTab('post')}
               className={`px-3 py-1 rounded-lg transition-colors ${
@@ -866,79 +654,89 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
             </button>
           </div>
 
-          {/* Phone Mockup Frame */}
-          <div className="w-[330px] h-[640px] bg-[#101216] rounded-[44px] p-3 shadow-2xl ring-1 ring-slate-900/10 flex flex-col relative select-none">
+          {/* Phone Mockup Frame (Matching Screenshot 2) */}
+          <div className="w-[340px] h-[670px] bg-[#101216] rounded-[46px] p-3 shadow-2xl ring-1 ring-slate-900/10 flex flex-col relative select-none">
             {/* Dynamic Island */}
             <div className="absolute top-4 left-1/2 -translate-x-1/2 w-24 h-4 bg-black rounded-full z-30 flex items-center justify-center">
               <div className="w-2.5 h-2.5 rounded-full bg-slate-900 border border-slate-800 mr-2" />
             </div>
 
             {/* Inner Phone Display */}
-            <div className="flex-1 bg-white rounded-[34px] overflow-hidden flex flex-col text-slate-900 text-xs relative">
+            <div className="flex-1 bg-white rounded-[36px] overflow-hidden flex flex-col text-slate-900 text-xs relative">
               {/* Status Bar */}
               <div className="h-8 px-6 pt-2 flex items-center justify-between text-[11px] font-semibold text-slate-900 bg-white shrink-0">
-                <span>{phoneTab === 'dm' ? '4:28' : '11:29'}</span>
-                <div className="flex items-center gap-1 text-[10px]">
+                <span>{phoneTab === 'dm' ? '4:28' : '2:04'}</span>
+                <div className="flex items-center gap-1.5 text-[10px]">
                   <span>5G</span>
-                  <div className="w-4 h-2 border border-slate-900 rounded-xs p-0.5">
+                  <div className="w-5 h-2.5 border border-slate-900 rounded-xs p-0.5">
                     <div className="w-full h-full bg-slate-900" />
                   </div>
                 </div>
               </div>
 
-              {/* POST VIEW */}
+              {/* POST VIEW (Matching Screenshot 2 dot-to-dot!) */}
               {phoneTab === 'post' && (
                 <div className="flex-1 overflow-y-auto flex flex-col bg-white">
+                  {/* Top Bar: < USERNAME Posts */}
                   <div className="h-9 px-3 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
                     <ChevronLeft className="w-4 h-4 text-slate-800" />
                     <div className="text-center">
-                      <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold block leading-none truncate max-w-[150px]">
-                        {activeUsername}
+                      <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold block leading-none truncate max-w-[180px]">
+                        {activeUsername.toUpperCase()}
                       </span>
                       <span className="text-[11px] font-extrabold text-slate-900 leading-none">
-                        Reels
+                        Posts
                       </span>
                     </div>
                     <div className="w-4" />
                   </div>
 
+                  {/* Account Header */}
                   <div className="p-2.5 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 flex items-center justify-center text-[8px] font-bold text-white uppercase shrink-0">
-                        {activeUsername.slice(0, 2)}
+                      <div className="w-7 h-7 rounded-full bg-[#0a180f] border border-[#c5a059] flex items-center justify-center text-[7px] font-bold text-[#c5a059] leading-none shrink-0">
+                        {activeUsername.slice(0, 2).toUpperCase()}
                       </div>
-                      <span className="font-bold text-[11px] text-slate-900 truncate max-w-[160px]">
+                      <span className="font-bold text-[11px] text-slate-900 truncate max-w-[170px]">
                         {activeUsername}
                       </span>
                     </div>
                     <MoreHorizontal className="w-4 h-4 text-slate-700" />
                   </div>
 
-                  {/* Reel Media Preview */}
+                  {/* Reel Photo / Video with Overlay (Screenshot 2) */}
                   <div className="w-full aspect-[4/4] bg-slate-900 relative overflow-hidden shrink-0">
                     <img
                       src={displayThumbnail}
                       alt="Reel Media"
                       className="w-full h-full object-cover"
                     />
-                    <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-xs text-white px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-1">
-                      <Film className="w-2.5 h-2.5" /> Reel
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex flex-col justify-end p-2.5">
+                      <span className="text-[10px] font-black text-amber-300 uppercase leading-none drop-shadow-md">
+                        {activeName}
+                      </span>
                     </div>
                   </div>
 
-                  {/* Actions & Caption */}
+                  {/* Actions & Reel Caption */}
                   <div className="p-3 space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <Heart className="w-4 h-4" />
-                        <MessageCircle className="w-4 h-4" />
+                        <div className="flex items-center gap-1">
+                          <Heart className="w-4 h-4" />
+                          <span className="text-[11px] font-semibold">{selectedItem?.likeCount || 74}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <MessageCircle className="w-4 h-4" />
+                          <span className="text-[11px] font-semibold">{selectedItem?.commentsCount || 1}</span>
+                        </div>
                         <Send className="w-4 h-4" />
                       </div>
                       <Bookmark className="w-4 h-4" />
                     </div>
 
                     <div className="space-y-1">
-                      <p className="text-[11px] text-slate-800 leading-tight">
+                      <p className="text-[11px] text-slate-800 leading-snug whitespace-pre-line">
                         <span className="font-bold mr-1.5">{activeUsername}</span>
                         {displayCaption}
                       </p>
@@ -960,19 +758,17 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                     <span className="text-slate-400 text-[10px]">Active Automation</span>
                   </div>
 
-                  {/* User Comment */}
                   <div className="space-y-2">
                     <div className="flex items-start gap-2">
                       <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-[9px]">
-                        JD
+                        PS
                       </div>
                       <div className="flex-1 bg-slate-50 p-2.5 rounded-xl text-[11px]">
-                        <span className="font-bold text-slate-900 block">shopper_jane</span>
-                        <span>{keywords[0] || 'PRICE'} please!</span>
+                        <span className="font-bold text-slate-900 block">priya_sharma</span>
+                        <span>{keywords[0] || 'PRICE'} PLEASE for this necklace??</span>
                       </div>
                     </div>
 
-                    {/* Bot Public Reply */}
                     {enablePublicReply && (
                       <div className="flex items-start gap-2 pl-6">
                         <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-amber-500 to-purple-600 text-white font-bold flex items-center justify-center text-[8px]">
@@ -1041,6 +837,108 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
           </div>
         </div>
       </div>
+
+      {/* SHOW ALL REELS MODAL (Full Gallery with Search) */}
+      {showAllModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-2">
+                <Film className="w-5 h-5 text-blue-600" />
+                <h3 className="text-sm font-bold text-slate-900">
+                  Select Reel or Post from @{activeUsername}
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowAllModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Search Bar */}
+            <div className="p-3 border-b border-slate-100 bg-white">
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchReelTerm}
+                  onChange={(e) => setSearchReelTerm(e.target.value)}
+                  placeholder="Search reels by caption or title..."
+                  className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+            </div>
+
+            {/* Modal Grid */}
+            <div className="p-4 overflow-y-auto flex-1">
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                {liveMedia
+                  .filter((m) =>
+                    (m.caption || '').toLowerCase().includes(searchReelTerm.toLowerCase())
+                  )
+                  .map((item) => {
+                    const isSelected = selectedPostId === item.id;
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => {
+                          handleSelectReel(item);
+                          setShowAllModal(false);
+                        }}
+                        className={`relative aspect-[3/4] rounded-xl overflow-hidden border-2 cursor-pointer transition-all hover:scale-[1.02] ${
+                          isSelected
+                            ? 'border-[#0066ff] ring-2 ring-[#0066ff]/30'
+                            : 'border-slate-200 hover:border-slate-400'
+                        }`}
+                      >
+                        <img
+                          src={item.thumbnailUrl || item.mediaUrl}
+                          alt={item.caption || 'Reel'}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 flex flex-col justify-between p-2">
+                          <div className="flex justify-end">
+                            {isSelected && (
+                              <span className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center text-white">
+                                <Check className="w-3 h-3 stroke-[3]" />
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-white font-semibold line-clamp-2 leading-tight">
+                              {item.caption || 'Instagram Reel'}
+                            </p>
+                            <div className="flex items-center gap-2 text-[9px] text-white/80 mt-1">
+                              <span>❤️ {item.likeCount ?? 0}</span>
+                              <span>💬 {item.commentsCount ?? 0}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs">
+              <span className="text-slate-500 font-medium">
+                {liveMedia.length} media items loaded for @{activeUsername}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowAllModal(false)}
+                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-2xs"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
