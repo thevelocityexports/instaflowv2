@@ -113,6 +113,21 @@ export class DatabaseService {
     return false;
   }
 
+  public setSupabaseConfig(url: string, key: string): boolean {
+    if (!url || !key) return false;
+    try {
+      this.supabase = createClient(url, key);
+      this.isUsingSupabase = true;
+      process.env.SUPABASE_URL = url;
+      process.env.SUPABASE_SERVICE_ROLE_KEY = key;
+      LoggingService.info('DatabaseService dynamically reconfigured Supabase connection');
+      return true;
+    } catch (err) {
+      LoggingService.error('Failed to set Supabase config', err);
+      return false;
+    }
+  }
+
   public isUsingSupabaseDatabase(): boolean {
     this.ensureClient();
     return this.isUsingSupabase;
@@ -230,22 +245,93 @@ export class DatabaseService {
     if (!id) return null;
     const direct = this.users.get(id);
     if (direct) return direct;
+
+    if (this.isUsingSupabase && this.supabase) {
+      try {
+        const { data, error } = await this.supabase
+          .from('users')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+        if (data && !error) {
+          const user: User = {
+            id: data.id,
+            email: data.email,
+            fullName: data.full_name || data.fullName || data.email.split('@')[0],
+            companyName: data.company_name || data.companyName,
+            avatarUrl: data.avatar_url || data.avatarUrl,
+            password: data.password,
+            createdAt: data.created_at || data.createdAt || new Date().toISOString(),
+          };
+          this.users.set(user.id, user);
+          return user;
+        }
+      } catch (err) {
+        LoggingService.warn('Supabase getUser lookup error', err);
+      }
+    }
+
     return this.getUserByEmail(id);
   }
 
   async getUserByEmail(email: string): Promise<User | null> {
     if (!email) return null;
+    const cleanEmail = email.toLowerCase().trim();
     for (const user of this.users.values()) {
-      if (user.email.toLowerCase() === email.toLowerCase()) {
+      if (user.email.toLowerCase() === cleanEmail) {
         return user;
       }
     }
+
+    if (this.isUsingSupabase && this.supabase) {
+      try {
+        const { data, error } = await this.supabase
+          .from('users')
+          .select('*')
+          .eq('email', cleanEmail)
+          .maybeSingle();
+        if (data && !error) {
+          const user: User = {
+            id: data.id,
+            email: data.email,
+            fullName: data.full_name || data.fullName || cleanEmail.split('@')[0],
+            companyName: data.company_name || data.companyName,
+            avatarUrl: data.avatar_url || data.avatarUrl,
+            password: data.password,
+            createdAt: data.created_at || data.createdAt || new Date().toISOString(),
+          };
+          this.users.set(user.id, user);
+          return user;
+        }
+      } catch (err) {
+        LoggingService.warn('Supabase getUserByEmail lookup error', err);
+      }
+    }
+
     return null;
   }
 
   async saveUser(user: User): Promise<User> {
     this.users.set(user.id, user);
     this.saveToDisk();
+
+    if (this.isUsingSupabase && this.supabase) {
+      try {
+        await this.supabase.from('users').upsert({
+          id: user.id,
+          email: user.email.toLowerCase(),
+          full_name: user.fullName,
+          company_name: user.companyName,
+          password: user.password,
+          avatar_url: user.avatarUrl,
+          created_at: user.createdAt || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+      } catch (err) {
+        LoggingService.warn('Supabase saveUser upsert error (will use local store)', err);
+      }
+    }
+
     return user;
   }
 

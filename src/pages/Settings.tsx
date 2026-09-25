@@ -32,6 +32,10 @@ export const Settings: React.FC = () => {
   // Supabase Database State
   const [copiedSql, setCopiedSql] = useState(false);
   const [dbPassword, setDbPassword] = useState('');
+  const [inputSupabaseUrl, setInputSupabaseUrl] = useState('');
+  const [inputSupabaseKey, setInputSupabaseKey] = useState('');
+  const [isSavingSupabase, setIsSavingSupabase] = useState(false);
+  const [supabaseMsg, setSupabaseMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isMigrating, setIsMigrating] = useState(false);
   const [migrationMsg, setMigrationMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [dbStatus, setDbStatus] = useState<{
@@ -39,6 +43,7 @@ export const Settings: React.FC = () => {
     provider: 'supabase' | 'local_memory';
     isUsingSupabase: boolean;
     projectId?: string | null;
+    supabaseUrl?: string;
     envConfig: {
       supabaseUrlConfigured: boolean;
       supabaseKeyConfigured: boolean;
@@ -65,10 +70,40 @@ export const Settings: React.FC = () => {
     try {
       const res = await ApiClient.getDatabaseStatus();
       setDbStatus(res);
+      if (res.supabaseUrl && !inputSupabaseUrl) {
+        setInputSupabaseUrl(res.supabaseUrl);
+      }
     } catch (err) {
       console.error('Failed to get database status', err);
     } finally {
       setIsChecking(false);
+    }
+  };
+
+  const handleSaveSupabaseConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputSupabaseUrl.trim() || !inputSupabaseKey.trim()) {
+      setSupabaseMsg({ type: 'error', text: 'Please provide both your Supabase Project URL and API Key.' });
+      return;
+    }
+
+    setIsSavingSupabase(true);
+    setSupabaseMsg(null);
+    try {
+      const res = await ApiClient.saveDatabaseConfig({
+        supabaseUrl: inputSupabaseUrl.trim(),
+        supabaseKey: inputSupabaseKey.trim(),
+      });
+      if (res.success) {
+        setSupabaseMsg({ type: 'success', text: res.message || 'Supabase connected successfully!' });
+        await checkStatus();
+      } else {
+        setSupabaseMsg({ type: 'error', text: res.error || 'Failed to connect to Supabase.' });
+      }
+    } catch (err: any) {
+      setSupabaseMsg({ type: 'error', text: err?.message || 'Error connecting to Supabase.' });
+    } finally {
+      setIsSavingSupabase(false);
     }
   };
 
@@ -870,6 +905,100 @@ ALTER TABLE public.comment_logs ENABLE ROW LEVEL SECURITY;
             </form>
           </div>
         )}
+      </div>
+
+      {/* Supabase Credentials Configuration Card */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs p-6 space-y-5">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+              <Key className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-slate-900">Supabase Connection Credentials</h4>
+              <p className="text-xs text-slate-500">
+                Connect your Supabase project to persist user logins, accounts, automations, and comment logs.
+              </p>
+            </div>
+          </div>
+          <a
+            href="https://supabase.com/dashboard"
+            target="_blank"
+            rel="noreferrer"
+            className="text-[11px] text-[#0066ff] hover:underline flex items-center gap-1 font-medium"
+          >
+            Supabase Dashboard <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+
+        {supabaseMsg && (
+          <div
+            className={`p-3.5 rounded-xl text-xs flex items-center justify-between gap-3 ${
+              supabaseMsg.type === 'success'
+                ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
+                : 'bg-rose-50 text-rose-900 border border-rose-200'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {supabaseMsg.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              )}
+              <span className="font-medium">{supabaseMsg.text}</span>
+            </div>
+            <button onClick={() => setSupabaseMsg(null)} className="text-slate-400 hover:text-slate-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        <form onSubmit={handleSaveSupabaseConfig} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5 text-slate-400" />
+                Supabase Project URL *
+              </label>
+              <input
+                type="url"
+                value={inputSupabaseUrl}
+                onChange={(e) => setInputSupabaseUrl(e.target.value)}
+                placeholder="https://your-project-id.supabase.co"
+                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0066ff] shadow-2xs"
+                required
+              />
+              <p className="text-[10px] text-slate-400">Found in Supabase Dashboard → Settings → API → Project URL</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <Key className="w-3.5 h-3.5 text-slate-400" />
+                Supabase Service Role Secret / Anon Key *
+              </label>
+              <input
+                type="password"
+                value={inputSupabaseKey}
+                onChange={(e) => setInputSupabaseKey(e.target.value)}
+                placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..."
+                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0066ff] shadow-2xs"
+                required
+              />
+              <p className="text-[10px] text-slate-400">Found in Supabase Dashboard → Settings → API → service_role / anon</p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button
+              type="submit"
+              disabled={isSavingSupabase || !inputSupabaseUrl.trim() || !inputSupabaseKey.trim()}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center gap-2 transition-colors disabled:opacity-50"
+            >
+              <Save className={`w-3.5 h-3.5 ${isSavingSupabase ? 'animate-spin' : ''}`} />
+              {isSavingSupabase ? 'Connecting...' : 'Connect Supabase Database'}
+            </button>
+          </div>
+        </form>
       </div>
 
       {/* Step-by-Step Supabase Setup Guide */}

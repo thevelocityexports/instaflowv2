@@ -46,6 +46,7 @@ databaseRouter.get('/status', async (req: Request, res: Response) => {
       provider: isUsingSupabase ? 'supabase' : 'local_memory',
       isUsingSupabase,
       projectId,
+      supabaseUrl: process.env.SUPABASE_URL || '',
       envConfig: {
         supabaseUrlConfigured,
         supabaseKeyConfigured,
@@ -64,6 +65,50 @@ databaseRouter.get('/status', async (req: Request, res: Response) => {
       success: false,
       error: 'Failed to verify database connection status',
     });
+  }
+});
+
+/**
+ * POST /api/database/config
+ * Saves and tests Supabase connection credentials
+ */
+databaseRouter.post('/config', async (req: Request, res: Response) => {
+  try {
+    const { supabaseUrl, supabaseKey } = req.body;
+    if (!supabaseUrl || !supabaseKey) {
+      return res.status(400).json({ success: false, error: 'Both Supabase URL and Key are required.' });
+    }
+
+    const cleanUrl = supabaseUrl.trim();
+    const cleanKey = supabaseKey.trim();
+
+    const ok = databaseService.setSupabaseConfig(cleanUrl, cleanKey);
+    if (!ok) {
+      return res.status(400).json({ success: false, error: 'Failed to initialize Supabase client with given credentials.' });
+    }
+
+    const client = databaseService.getSupabaseClient();
+    let tablesOk = false;
+    let tableError = null;
+
+    if (client) {
+      const { error } = await client.from('users').select('id').limit(1);
+      if (!error) {
+        tablesOk = true;
+      } else {
+        tableError = error.message;
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: tablesOk
+        ? 'Connected to Supabase successfully and verified tables!'
+        : `Connected to Supabase, but schema tables may need migration: ${tableError || 'Not found'}`,
+      tablesVerified: tablesOk,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to save configuration' });
   }
 });
 

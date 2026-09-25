@@ -14,7 +14,7 @@ router.get('/me', async (req: Request, res: Response): Promise<void> => {
   try {
     const user = await AuthService.resolveUser(req);
     if (!user) {
-      res.status(401).json({ user: null, isAuthenticated: false });
+      res.status(200).json({ user: null, isAuthenticated: false });
       return;
     }
     const { password, ...safeUser } = user;

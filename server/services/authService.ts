@@ -64,9 +64,8 @@ export class AuthService {
       } catch (err) {}
     }
 
-    // Default fallback to ensure preview/demo continuity if single user
-    const defaultUser = await databaseService.getUser('usr_default_01');
-    return defaultUser || null;
+    // Return null if no valid token or identifier is present
+    return null;
   }
 
   /**

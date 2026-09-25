@@ -273,6 +273,7 @@ export class ApiClient {
     provider: 'supabase' | 'local_memory';
     isUsingSupabase: boolean;
     projectId?: string | null;
+    supabaseUrl?: string;
     envConfig: {
       supabaseUrlConfigured: boolean;
       supabaseKeyConfigured: boolean;
@@ -282,6 +283,16 @@ export class ApiClient {
     message: string;
   }> {
     return this.request('/database/status');
+  }
+
+  static async saveDatabaseConfig(payload: {
+    supabaseUrl: string;
+    supabaseKey: string;
+  }): Promise<{ success: boolean; message: string; tablesVerified?: boolean; error?: string }> {
+    return this.request('/database/config', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   }
 
   static async runDatabaseMigration(payload: {
@@ -334,8 +345,16 @@ export class ApiClient {
   }
 
   // Auth
-  static async getCurrentUser(): Promise<{ user: User; isAuthenticated: boolean }> {
-    return this.request('/auth/me');
+  static async getCurrentUser(): Promise<{ user: User | null; isAuthenticated: boolean }> {
+    const token = ApiClient.getAuthToken();
+    if (!token) {
+      return { user: null, isAuthenticated: false };
+    }
+    try {
+      return await this.request('/auth/me');
+    } catch {
+      return { user: null, isAuthenticated: false };
+    }
   }
 
   static async signUp(data: {

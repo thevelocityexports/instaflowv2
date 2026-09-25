@@ -63,11 +63,12 @@ export default function App() {
       ]);
 
       if (userRes.status === 'fulfilled') {
-        if (userRes.value?.user) {
+        if (userRes.value?.user && userRes.value?.isAuthenticated) {
           setCurrentUser(userRes.value.user);
           localStorage.setItem('instaflow_auth_user', JSON.stringify(userRes.value.user));
-        } else {
+        } else if (!ApiClient.getAuthToken()) {
           setCurrentUser(null);
+          localStorage.removeItem('instaflow_auth_user');
         }
       }
 
