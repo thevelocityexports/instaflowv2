@@ -163,7 +163,7 @@ export class InstagramService {
   }
 
   /**
-   * Generates official Meta OAuth Authorization URL
+   * Generates official Meta OAuth Authorization URL (Facebook / Meta Dialog)
    */
   static getOAuthAuthorizeUrl(state?: string): { url: string; isConfigured: boolean } {
     const config = this.getConfigStatus();
@@ -184,6 +184,34 @@ export class InstagramService {
 
     return {
       url: `${this.OAUTH_DIALOG_URL}?${params.toString()}`,
+      isConfigured: true,
+    };
+  }
+
+  /**
+   * Generates direct Instagram Login URL (Users log in with Instagram Username & Password directly)
+   */
+  static getInstagramDirectLoginUrl(state?: string): { url: string; isConfigured: boolean } {
+    const config = this.getConfigStatus();
+    if (!config.appIdConfigured) {
+      return {
+        url: '#requires-meta-config',
+        isConfigured: false,
+      };
+    }
+
+    const params = new URLSearchParams({
+      client_id: process.env.META_APP_ID || '',
+      redirect_uri: config.redirectUri || '',
+      scope: this.REQUIRED_SCOPES,
+      response_type: 'code',
+      enable_fb_login: '0',
+      force_authentication: '1',
+      state: state || 'instaflow_ig_direct',
+    });
+
+    return {
+      url: `https://www.instagram.com/oauth/authorize?${params.toString()}`,
       isConfigured: true,
     };
   }

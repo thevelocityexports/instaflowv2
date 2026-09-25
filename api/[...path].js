@@ -815,7 +815,7 @@ var InstagramService = class _InstagramService {
     return this.getConfigStatus();
   }
   /**
-   * Generates official Meta OAuth Authorization URL
+   * Generates official Meta OAuth Authorization URL (Facebook / Meta Dialog)
    */
   static getOAuthAuthorizeUrl(state) {
     const config = this.getConfigStatus();
@@ -834,6 +834,31 @@ var InstagramService = class _InstagramService {
     });
     return {
       url: `${this.OAUTH_DIALOG_URL}?${params.toString()}`,
+      isConfigured: true
+    };
+  }
+  /**
+   * Generates direct Instagram Login URL (Users log in with Instagram Username & Password directly)
+   */
+  static getInstagramDirectLoginUrl(state) {
+    const config = this.getConfigStatus();
+    if (!config.appIdConfigured) {
+      return {
+        url: "#requires-meta-config",
+        isConfigured: false
+      };
+    }
+    const params = new URLSearchParams({
+      client_id: process.env.META_APP_ID || "",
+      redirect_uri: config.redirectUri || "",
+      scope: this.REQUIRED_SCOPES,
+      response_type: "code",
+      enable_fb_login: "0",
+      force_authentication: "1",
+      state: state || "instaflow_ig_direct"
+    });
+    return {
+      url: `https://www.instagram.com/oauth/authorize?${params.toString()}`,
       isConfigured: true
     };
   }
@@ -1110,6 +1135,21 @@ router2.get("/connect", async (req, res) => {
     res.redirect("/?tab=instagram&error=Failed+to+initiate+Instagram+connection");
   }
 });
+router2.get("/connect-ig", async (req, res) => {
+  try {
+    const user = await AuthService.resolveUser(req);
+    const userId = user ? user.id : "usr_default_01";
+    const { url, isConfigured } = InstagramService.getInstagramDirectLoginUrl(`user_${userId}`);
+    if (!isConfigured) {
+      res.redirect("/?tab=instagram&meta_error=missing_credentials");
+      return;
+    }
+    res.redirect(url);
+  } catch (err) {
+    LoggingService.error("Error generating Instagram Direct Login URL", err);
+    res.redirect("/?tab=instagram&error=Failed+to+initiate+Instagram+connection");
+  }
+});
 router2.get("/callback", async (req, res) => {
   const { code, error, error_description } = req.query;
   if (error) {
@@ -1123,11 +1163,54 @@ router2.get("/callback", async (req, res) => {
   }
   try {
     const tokenResult = await InstagramService.exchangeCodeForToken(code);
-    if (tokenResult.error) {
-      res.redirect(`/?tab=instagram&error=${encodeURIComponent(tokenResult.error)}`);
+    if (tokenResult.error || !tokenResult.accessToken) {
+      res.redirect(`/?tab=instagram&error=${encodeURIComponent(tokenResult.error || "Token exchange failed")}`);
       return;
     }
-    res.redirect("/?tab=instagram&connected=true");
+    const accessToken = tokenResult.accessToken;
+    let igUsername = "connected_user";
+    let igName = "Instagram Account";
+    let igUserId = `ig_${Date.now()}`;
+    try {
+      const meRes = await fetch(`https://graph.facebook.com/v21.0/me?fields=id,name,username&access_token=${accessToken}`);
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        if (meData.username) igUsername = meData.username;
+        if (meData.name) igName = meData.name;
+        if (meData.id) igUserId = meData.id;
+      }
+    } catch (e) {
+      LoggingService.warn("Could not query /me on Meta Graph API, using defaults", e);
+    }
+    const userId = "usr_default_01";
+    const savedAccount = await databaseService.upsertInstagramAccount(userId, {
+      username: igUsername,
+      name: igName,
+      instagramUserId: igUserId,
+      accessToken
+    });
+    const htmlResponse = `
+      <!DOCTYPE html>
+      <html>
+        <head><title>Instagram Connected</title></head>
+        <body style="font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f9fafb;">
+          <div style="text-align: center; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+            <div style="font-size: 40px; margin-bottom: 12px;">\u2705</div>
+            <h2 style="margin: 0 0 8px; color: #111827;">Connected Successfully!</h2>
+            <p style="margin: 0; color: #6b7280; font-size: 14px;">Your Instagram account @${savedAccount.username} is connected. Closing this window...</p>
+          </div>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({ type: 'INSTAGRAM_CONNECTED', account: ${JSON.stringify(savedAccount)} }, '*');
+              setTimeout(function() { window.close(); }, 800);
+            } else {
+              setTimeout(function() { window.location.href = '/?tab=instagram&connected=true'; }, 1000);
+            }
+          </script>
+        </body>
+      </html>
+    `;
+    res.send(htmlResponse);
   } catch (err) {
     LoggingService.error("Failed processing Instagram OAuth callback", err);
     res.redirect("/?tab=instagram&error=Failed+to+complete+Instagram+OAuth+connection");

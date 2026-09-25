@@ -182,6 +182,32 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
     }
   };
 
+  const handleDirectInstagramPopup = () => {
+    const width = 600;
+    const height = 750;
+    const left = window.screen.width / 2 - width / 2;
+    const top = window.screen.height / 2 - height / 2;
+    const popup = window.open(
+      '/api/instagram/connect-ig',
+      'instagram_oauth_popup',
+      `toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, copyhistory=no, width=${width}, height=${height}, top=${top}, left=${left}`
+    );
+
+    // Listen for postMessage from popup when authentication finishes
+    const messageListener = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'INSTAGRAM_CONNECTED') {
+        window.removeEventListener('message', messageListener);
+        setConnectResult({
+          type: 'success',
+          text: `✓ Instagram account @${event.data.account?.username || 'user'} connected successfully!`,
+        });
+        onRefresh();
+        fetchAccounts();
+      }
+    };
+    window.addEventListener('message', messageListener);
+  };
+
   const handleConnectClick = () => {
     // If Meta App ID or Secret is not configured, open the credentials input modal directly!
     if (!metaConfig?.appIdConfigured || !metaConfig?.appSecretConfigured) {
@@ -670,39 +696,56 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
                 </form>
               </div>
 
-              {/* Option 2: Meta OAuth Login */}
-              <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col justify-between space-y-4">
+              {/* Option 2: Manychat-Style Direct Instagram / Meta Login */}
+              <div className="p-5 bg-gradient-to-br from-purple-50/50 via-slate-50 to-pink-50/40 border border-slate-200 rounded-2xl flex flex-col justify-between space-y-4">
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
-                      2
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                        2
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900">Instagram & Meta Login</h4>
+                        <p className="text-[11px] text-slate-500">Sign in with Instagram User ID & Password</p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900">Meta OAuth Login</h4>
-                      <p className="text-[11px] text-slate-500">Official Graph API v21.0 OAuth</p>
-                    </div>
+                    <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded">
+                      Client-Friendly
+                    </span>
                   </div>
                   <p className="text-xs text-slate-600 leading-relaxed pt-1">
-                    Authenticates via Facebook Login dialog. Requires your Meta Developer App ID and Secret configured in environment secrets.
+                    Your clients simply log in directly using their Instagram username / email & password inside the secure Instagram popup. No Meta developer keys required from them.
                   </p>
                 </div>
 
                 <div className="space-y-2">
+                  {/* Primary: Direct Instagram Login (Manychat Screenshot 3 & 4) */}
+                  <button
+                    type="button"
+                    onClick={handleDirectInstagramPopup}
+                    className="w-full py-2.5 bg-[#0066ff] hover:bg-[#0052cc] text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2"
+                  >
+                    <Instagram className="w-4 h-4" />
+                    Connect Via Instagram
+                  </button>
+
+                  {/* Secondary: Connect Via Meta (Manychat Screenshot 2) */}
                   <button
                     type="button"
                     onClick={handleConnectClick}
-                    className="w-full py-2.5 bg-gradient-to-r from-amber-600 via-rose-600 to-purple-600 hover:opacity-95 text-white rounded-lg text-xs font-semibold transition-all shadow-xs flex items-center justify-center gap-2"
+                    className="w-full py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-2 shadow-2xs"
                   >
-                    <Instagram className="w-4 h-4" />
-                    {metaConfig?.appIdConfigured && metaConfig?.appSecretConfigured
-                      ? 'Connect via Meta OAuth'
-                      : 'Enter App ID & Connect via Meta'}
+                    Connect Via Meta (Facebook)
                   </button>
-                  <p className="text-[11px] text-center text-slate-500">
-                    {metaConfig?.appIdConfigured && metaConfig?.appSecretConfigured
-                      ? '✓ Meta App ID & Secret ready to connect'
-                      : 'Click to enter your Meta App ID & Secret'}
-                  </p>
+
+                  {/* Meta Business Partner Banner (Screenshot 2) */}
+                  <div className="pt-2 flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-200/80">
+                    <span>InstaFlow Automation Engine</span>
+                    <span className="font-bold text-slate-800 flex items-center gap-1">
+                      <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+                      Meta Graph API v21.0
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
