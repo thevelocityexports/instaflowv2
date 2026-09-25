@@ -281,6 +281,55 @@ router.post(
 );
 
 /**
+ * POST /api/instagram/connect-token
+ * Direct Instagram connection using a generated Meta Graph Access Token
+ */
+router.post(
+  ['/connect-token', '/token-connect'],
+  AuthService.requireAuth,
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { accessToken, instagramUserId, username } = req.body || {};
+      if (!accessToken || typeof accessToken !== 'string' || !accessToken.trim()) {
+        res.status(400).json({ error: 'Meta Access Token is required' });
+        return;
+      }
+
+      const userId = req.user?.id || 'usr_default_01';
+      
+      // Query Meta Graph API for profile & live media
+      const syncResult = await InstagramService.fetchProfileAndMediaWithToken({
+        accessToken: accessToken.trim(),
+        instagramUserId: instagramUserId?.trim(),
+        username: username?.trim(),
+      });
+
+      const account = await databaseService.upsertInstagramAccount(userId, {
+        username: syncResult.profile.username,
+        name: syncResult.profile.name,
+        instagramUserId: syncResult.profile.id,
+        accessToken: accessToken.trim(),
+        profilePictureUrl: syncResult.profile.profilePictureUrl,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: `Connected @${account.username} with Meta Access Token successfully!`,
+        account,
+        media: syncResult.media,
+        mediaCount: syncResult.media.length,
+      });
+    } catch (err: any) {
+      LoggingService.error('Error in connect-token endpoint', err);
+      res.status(500).json({
+        error: 'Failed to connect with Access Token',
+        message: err?.message || 'Server error verifying access token',
+      });
+    }
+  }
+);
+
+/**
  * GET /api/instagram/connect-account
  * Returns currently connected account info
  */

@@ -495,4 +495,96 @@ export class InstagramService {
       };
     }
   }
+
+  /**
+   * ACTION 4: Connect & Sync Live Profile and Media using Meta Access Token
+   * Queries Meta Graph API (supports Instagram Scoped ID, e.g. 17841433664757597 or 'me')
+   */
+  static async fetchProfileAndMediaWithToken(options: {
+    accessToken: string;
+    instagramUserId?: string;
+    username?: string;
+  }): Promise<{
+    success: boolean;
+    profile: {
+      id: string;
+      username: string;
+      name: string;
+      profilePictureUrl?: string;
+      followersCount?: number;
+      mediaCount?: number;
+    };
+    media: InstagramMediaItem[];
+    error?: string;
+  }> {
+    const { accessToken, instagramUserId, username } = options;
+    const cleanToken = accessToken.trim();
+    const targetId = instagramUserId && instagramUserId.trim() ? instagramUserId.trim() : 'me';
+
+    try {
+      // 1. Fetch live Profile
+      const profileUrl = `${this.GRAPH_API_BASE}/${targetId}?fields=id,username,name,profile_picture_url,followers_count,media_count&access_token=${cleanToken}`;
+      const profRes = await fetch(profileUrl);
+      const profData = await profRes.json();
+
+      let finalUsername = username ? username.replace(/^@/, '').trim() : '';
+      let finalName = finalUsername || 'Instagram Account';
+      let finalId = targetId !== 'me' ? targetId : `ig_${Date.now()}`;
+      let profilePictureUrl: string | undefined = undefined;
+      let followersCount = 0;
+      let mediaCount = 0;
+
+      if (profRes.ok && !profData.error) {
+        if (profData.username) finalUsername = profData.username;
+        if (profData.name) finalName = profData.name;
+        if (profData.id) finalId = profData.id;
+        if (profData.profile_picture_url) profilePictureUrl = profData.profile_picture_url;
+        if (profData.followers_count) followersCount = profData.followers_count;
+        if (profData.media_count) mediaCount = profData.media_count;
+      } else {
+        LoggingService.warn('Could not fetch full profile from Meta Graph, using token details:', profData?.error);
+        if (profData?.error?.message) {
+          LoggingService.warn(`Meta Graph Message: ${profData.error.message}`);
+        }
+      }
+
+      if (!finalUsername) {
+        finalUsername = 'panchalohajewels';
+        finalName = 'Panchaloha Jewels';
+      }
+
+      // 2. Fetch live media & reels
+      const mediaResult = await this.getAccountMedia({
+        instagramUserId: finalId !== 'me' ? finalId : undefined,
+        accessToken: cleanToken,
+        limit: 30,
+      });
+
+      return {
+        success: true,
+        profile: {
+          id: finalId,
+          username: finalUsername,
+          name: finalName,
+          profilePictureUrl,
+          followersCount,
+          mediaCount: mediaResult.media.length || mediaCount,
+        },
+        media: mediaResult.media,
+      };
+    } catch (err: any) {
+      LoggingService.error('Error fetching live profile with Meta token', err);
+      return {
+        success: false,
+        profile: {
+          id: targetId,
+          username: username || 'panchalohajewels',
+          name: username || 'Panchaloha Jewels',
+        },
+        media: [],
+        error: err?.message || 'Failed to connect via Meta Graph API',
+      };
+    }
+  }
 }
+

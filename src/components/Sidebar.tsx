@@ -98,9 +98,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="flex items-center gap-2 min-w-0">
                 {/* Account Avatar with PRO Badge */}
                 <div className="relative shrink-0">
-                  <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-purple-600 via-pink-500 to-rose-500 flex items-center justify-center text-[10px] font-bold text-white shadow-xs">
-                    {(connectedAccount.name || connectedAccount.username || 'IG').slice(0, 2).toUpperCase()}
-                  </div>
+                  {connectedAccount.profilePictureUrl ? (
+                    <img
+                      src={connectedAccount.profilePictureUrl}
+                      alt={connectedAccount.username}
+                      className="w-8 h-8 rounded-full object-cover border border-slate-200 shadow-xs"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 via-pink-500 to-rose-500 flex items-center justify-center text-[10px] font-bold text-white shadow-xs">
+                      {(connectedAccount.name || connectedAccount.username || 'IG').slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
                   <span className="absolute -bottom-1 -right-1 bg-[#0066ff] text-white text-[7px] font-black px-1 py-0.2 rounded-xs shadow-xs tracking-tighter">
                     PRO
                   </span>

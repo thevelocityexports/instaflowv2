@@ -200,6 +200,22 @@ export class ApiClient {
     }
   }
 
+  static async connectInstagramWithToken(data: {
+    accessToken: string;
+    instagramUserId?: string;
+    username?: string;
+  }): Promise<{
+    success: boolean;
+    account: InstagramAccount;
+    mediaCount: number;
+    message: string;
+  }> {
+    return this.request('/instagram/connect-token', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   static async switchInstagramAccount(accountId: string): Promise<{ success: boolean; account: InstagramAccount; message: string }> {
     try {
       return await this.request('/instagram/switch-account', {

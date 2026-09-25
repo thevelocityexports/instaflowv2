@@ -32,9 +32,9 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
   const [currentStep, setCurrentStep] = useState<OnboardingStep>('select_channel');
   const [showMoreOptions, setShowMoreOptions] = useState(true);
 
-  // Popup Modals: 'none' | 'instagram_login' | 'instagram_consent' | 'connecting' | 'success'
+  // Popup Modals: 'none' | 'instagram_login' | 'instagram_consent' | 'connecting' | 'success' | 'token_input'
   const [activePopup, setActivePopup] = useState<
-    'none' | 'instagram_login' | 'instagram_consent' | 'connecting' | 'success'
+    'none' | 'instagram_login' | 'instagram_consent' | 'connecting' | 'success' | 'token_input'
   >('none');
 
   // Instagram Login Form State inside Instagram Modal (Screenshot 5)
@@ -42,6 +42,47 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
   const [igPassword, setIgPassword] = useState('');
   const [isProcessingLogin, setIsProcessingLogin] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+
+  // Meta Developer Tester Access Token Input State
+  const [tokenInput, setTokenInput] = useState('');
+  const [tokenInstagramId, setTokenInstagramId] = useState('17841433664757597');
+  const [tokenUsername, setTokenUsername] = useState('panchalohajewels');
+  const [tokenError, setTokenError] = useState<string | null>(null);
+
+  // Submit Access Token Direct Connect
+  const handleConnectWithToken = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tokenInput.trim()) {
+      setTokenError('Please paste your Meta Graph Access Token.');
+      return;
+    }
+
+    setTokenError(null);
+    setIsProcessingLogin(true);
+
+    try {
+      const res = await ApiClient.connectInstagramWithToken({
+        accessToken: tokenInput.trim(),
+        instagramUserId: tokenInstagramId.trim() || undefined,
+        username: tokenUsername.trim() || 'panchalohajewels',
+      });
+
+      if (res.success && res.account) {
+        setIsProcessingLogin(false);
+        setActivePopup('success');
+        setTimeout(() => {
+          setActivePopup('none');
+          onAccountConnected(res.account);
+          if (onBackToApp) onBackToApp();
+        }, 1200);
+      } else {
+        throw new Error((res as any).error || res.message || 'Failed to verify Meta Access Token');
+      }
+    } catch (err: any) {
+      setIsProcessingLogin(false);
+      setTokenError(err?.message || 'Failed to verify Access Token with Meta Graph API.');
+    }
+  };
 
   // For Meta OAuth popup
   const handleOpenMetaOAuth = () => {
@@ -395,10 +436,38 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
               <button
                 type="button"
                 onClick={handleOpenMetaOAuth}
-                className="w-full py-3.5 bg-[#0066ff] hover:bg-[#0052cc] text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-[0.99] flex items-center justify-center gap-2"
+                className="w-full py-3.5 bg-[#0066ff] hover:bg-[#0052cc] text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
               >
                 Connect Via Meta
               </button>
+
+              {/* Instant Token Connect Card (Recommended for Meta Tester Token) */}
+              <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50/60 border-2 border-amber-300 rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-md bg-amber-500 text-white flex items-center justify-center text-xs font-bold">
+                      🔑
+                    </div>
+                    <span className="text-xs font-extrabold text-amber-950">
+                      Generated Tester Token
+                    </span>
+                  </div>
+                  <span className="px-2 py-0.5 bg-amber-200 text-amber-900 text-[10px] font-bold rounded-full uppercase tracking-wider">
+                    Instant Live Sync
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-900 leading-snug">
+                  Already generated an Access Token in Meta Developers for <b>@panchalohajewels</b>? Paste it here to fetch your real live profile photo and reels immediately!
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setActivePopup('token_input')}
+                  className="w-full py-2 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <span>Paste Access Token & Connect</span>
+                  <span>→</span>
+                </button>
+              </div>
 
               {/* Meta Business Partner Banner (Screenshot 2) */}
               <div className="p-4 bg-[#f9fafb] border border-slate-200 rounded-xl flex items-center justify-between">
@@ -680,6 +749,119 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
                   Cancel
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TESTER ACCESS TOKEN DIRECT CONNECT MODAL POPUP                            */}
+      {/* ========================================================================= */}
+      {activePopup === 'token_input' && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-[460px] rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
+            {/* Topbar */}
+            <div className="h-9 bg-slate-100 border-b border-slate-200 px-3.5 flex items-center justify-between text-xs text-slate-600 font-semibold">
+              <div className="flex items-center gap-2">
+                <span className="text-amber-600 font-bold">🔑</span>
+                <span>Connect Meta Tester Access Token</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActivePopup('none')}
+                className="text-slate-400 hover:text-slate-800 p-0.5 rounded cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4 bg-white">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Paste Meta Graph API Access Token
+                </h3>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Directly links your Meta Graph API token to fetch your verified profile picture, account metadata, and real uploaded Reels.
+                </p>
+              </div>
+
+              {tokenError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-medium">
+                  {tokenError}
+                </div>
+              )}
+
+              <form onSubmit={handleConnectWithToken} className="space-y-3.5">
+                {/* Access Token Textarea */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Meta User / Page Access Token <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={tokenInput}
+                    onChange={(e) => setTokenInput(e.target.value)}
+                    placeholder="EAA... or IGA..."
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#0066ff] focus:bg-white transition-all shadow-2xs resize-none"
+                    required
+                  />
+                  <span className="text-[10px] text-slate-400 block mt-0.5">
+                    Copy from your Meta Developer Portal under "2. Generate token"
+                  </span>
+                </div>
+
+                {/* Account Details */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Instagram Account ID
+                    </label>
+                    <input
+                      type="text"
+                      value={tokenInstagramId}
+                      onChange={(e) => setTokenInstagramId(e.target.value)}
+                      placeholder="17841433664757597"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:border-[#0066ff] focus:bg-white transition-all shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Username Handle
+                    </label>
+                    <input
+                      type="text"
+                      value={tokenUsername}
+                      onChange={(e) => setTokenUsername(e.target.value)}
+                      placeholder="panchalohajewels"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-[#0066ff] focus:bg-white transition-all shadow-2xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Submit button */}
+                <div className="pt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActivePopup('none')}
+                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isProcessingLogin || !tokenInput.trim()}
+                    className="flex-1 py-2.5 bg-[#0066ff] hover:bg-[#0052cc] disabled:bg-slate-300 text-white rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    {isProcessingLogin ? (
+                      <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      'Verify & Sync Account →'
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>

@@ -213,6 +213,7 @@ export class DatabaseService {
       name?: string;
       instagramUserId?: string;
       accessToken?: string;
+      profilePictureUrl?: string;
     }
   ): Promise<InstagramAccount> {
     const cleanUsername = data.username.replace(/^@/, '').trim();
@@ -232,6 +233,7 @@ export class DatabaseService {
       existing.name = data.name || cleanUsername;
       existing.isConnected = true;
       if (data.accessToken) existing.accessToken = data.accessToken;
+      if (data.profilePictureUrl) existing.profilePictureUrl = data.profilePictureUrl;
       existing.updatedAt = now;
       this.accounts.set(existing.id, existing);
 
@@ -244,6 +246,7 @@ export class DatabaseService {
             username: cleanUsername,
             name: existing.name,
             access_token: existing.accessToken,
+            profile_picture_url: existing.profilePictureUrl,
             is_connected: true,
             updated_at: now,
           });
@@ -268,6 +271,7 @@ export class DatabaseService {
       instagramUserId,
       username: cleanUsername,
       name: data.name || cleanUsername,
+      profilePictureUrl: data.profilePictureUrl,
       accessToken: data.accessToken,
       isConnected: true,
       connectedAt: now,
