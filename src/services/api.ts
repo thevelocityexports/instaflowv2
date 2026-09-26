@@ -133,6 +133,40 @@ export class ApiClient {
     return this.request('/instagram/accounts');
   }
 
+  // Get Active Connected Instagram Account
+  static async getConnectedAccount(): Promise<{
+    connected: boolean;
+    isConnected?: boolean;
+    account: InstagramAccount | null;
+    message?: string;
+  }> {
+    try {
+      return await this.request('/instagram/account');
+    } catch {
+      try {
+        const res = await this.getInstagramAccounts();
+        const active = res.accounts?.find((a) => a.isConnected) || res.accounts?.[0] || null;
+        return { connected: Boolean(active), isConnected: Boolean(active), account: active };
+      } catch {
+        return { connected: false, isConnected: false, account: null };
+      }
+    }
+  }
+
+  // Trigger Live Instagram Media Sync
+  static async syncMedia(accountId?: string): Promise<{
+    success: boolean;
+    media: InstagramMediaItem[];
+    mediaCount: number;
+    message: string;
+    account?: InstagramAccount;
+  }> {
+    return this.request('/instagram/sync-media', {
+      method: 'POST',
+      body: JSON.stringify({ accountId }),
+    });
+  }
+
   // Fetch Live Instagram Reels & Media
   static async getInstagramMedia(accountId?: string): Promise<{
     success: boolean;

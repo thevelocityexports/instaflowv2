@@ -550,11 +550,11 @@ export class DatabaseService {
       };
     }
 
-    // Set as primary active account and purge old demo accounts
+    // Set as primary active account and mark others inactive
     for (const [accId, acc] of Array.from(this.accounts.entries())) {
       if (acc.id !== account.id) {
         acc.isConnected = false;
-        if (acc.username.toLowerCase().includes('panchaloha') || acc.username.toLowerCase().includes('vajra')) {
+        if (acc.id === 'ig_acc_01' || acc.username.toLowerCase().includes('vajra_demo')) {
           this.accounts.delete(accId);
         }
       }

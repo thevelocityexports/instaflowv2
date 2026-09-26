@@ -216,6 +216,39 @@ export async function runAllTests(): Promise<{ passed: number; failed: number }>
   assert(mockEventResult.processed && mockEventResult.matchedAutomations > 0, '14. Mock test event successfully executes through the real automation pipeline');
   await databaseService.deleteAutomation(priceAuto.id, 'usr_default_01');
 
+  // Test 15: Successful Instagram account upsert & persistence
+  const testAcc = await databaseService.upsertInstagramAccount('usr_default_01', {
+    username: 'panchalohajewels',
+    name: 'Panchaloha Jewels',
+    instagramUserId: '17841400000000001',
+    accessToken: 'EAATestToken_Secret_DoNotExpose',
+    profilePictureUrl: 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?w=100',
+  });
+  assert(testAcc.username === 'panchalohajewels' && testAcc.isConnected === true, '15. Instagram account upsert successfully persists account and sets isConnected');
+
+  // Test 16: Safe account retrieval & sanitized metadata
+  const retrievedAcc = await databaseService.getConnectedInstagramAccount('usr_default_01');
+  assert(retrievedAcc !== null && retrievedAcc.username === 'panchalohajewels', '16. Connected Instagram account retrieval returns active account');
+
+  // Test 17: Media cache synchronization & retrieval
+  const sampleMedia = InstagramService.getDefaultMediaForAccount('panchalohajewels');
+  databaseService.setCachedMedia('panchalohajewels', sampleMedia);
+  const cachedMedia = databaseService.getCachedMedia('panchalohajewels');
+  assert(Array.isArray(cachedMedia) && cachedMedia.length > 0 && cachedMedia[0].isReel === true, '17. Initial media & reels synchronization stores and retrieves valid media metadata');
+
+  // Test 18: Cryptographic HMAC OAuth state generation and validation
+  const testState = InstagramService.createOAuthState('usr_test_123');
+  const validatedState = InstagramService.validateAndConsumeOAuthState(testState);
+  assert(validatedState.isValid === true && validatedState.userId === 'usr_test_123', '18. Cryptographic OAuth state is validated and derives authenticated user identity');
+
+  // Test 19: Replay prevention on OAuth state
+  const replayState = InstagramService.validateAndConsumeOAuthState(testState);
+  assert(replayState.isValid === false, '19. Consumed OAuth state cannot be replayed or reused');
+
+  // Test 20: Canonical redirect URI consistency
+  const authorizeRedirectUri = InstagramService.getRedirectUri();
+  assert(authorizeRedirectUri === 'https://instaflowv2.vercel.app/api/instagram/callback', '20. Canonical redirect URI consistently equals https://instaflowv2.vercel.app/api/instagram/callback');
+
   console.log('\n---------------------------------------------');
   console.log(`TEST RESULTS: ${passed} passed, ${failed} failed`);
   console.log('=============================================\n');

@@ -23,18 +23,26 @@ export class AuthService {
     const authHeader = req.headers.authorization;
     const userEmailHeader = (req.headers['x-user-email'] as string | undefined)?.trim().toLowerCase();
     const customUserId = (req.headers['x-user-id'] as string | undefined)?.trim();
+    const queryEmail = (req.query?.email as string | undefined)?.trim().toLowerCase();
+    const queryUserId = (req.query?.userId as string | undefined)?.trim();
 
-    // 1. Resolve by explicit x-user-email header from client session
-    if (userEmailHeader && userEmailHeader.includes('@') && !userEmailHeader.includes('undefined') && !userEmailHeader.includes('null')) {
+    // 1. Resolve by explicit x-user-email header or query param from client session
+    const targetEmail = (userEmailHeader && userEmailHeader.includes('@') && !userEmailHeader.includes('undefined') && !userEmailHeader.includes('null'))
+      ? userEmailHeader
+      : (queryEmail && queryEmail.includes('@') && !queryEmail.includes('undefined') && !queryEmail.includes('null'))
+        ? queryEmail
+        : undefined;
+
+    if (targetEmail) {
       try {
-        let user = await databaseService.getUserByEmail(userEmailHeader);
+        let user = await databaseService.getUserByEmail(targetEmail);
         if (user) return user;
 
-        const userUuid = toValidUuid(userEmailHeader);
-        const name = userEmailHeader.split('@')[0];
+        const userUuid = toValidUuid(targetEmail);
+        const name = targetEmail.split('@')[0];
         const newUser: User = {
           id: userUuid,
-          email: userEmailHeader,
+          email: targetEmail,
           fullName: name.charAt(0).toUpperCase() + name.slice(1),
           avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
           createdAt: new Date().toISOString(),
@@ -43,45 +51,46 @@ export class AuthService {
         await WorkspaceService.getOrCreateDefaultWorkspace(newUser.id, newUser.fullName);
         return newUser;
       } catch (err) {
-        LoggingService.warn('Error resolving user from x-user-email header', err);
+        LoggingService.warn('Error resolving user from email', err);
       }
     }
 
-    // 2. Resolve by Bearer authorization header
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7).trim();
-      if (token && token !== 'undefined' && token !== 'null' && token !== '') {
-        try {
-          const user = (await databaseService.getUser(token)) || (await databaseService.getUserByEmail(token));
-          if (user) return user;
+    // 2. Resolve by Bearer authorization header or query token
+    const queryToken = (req.query?.token as string | undefined)?.trim();
+    const bearerToken = (authHeader && authHeader.startsWith('Bearer ')) ? authHeader.substring(7).trim() : queryToken;
 
-          const emailCandidate = token.includes('@') ? token.toLowerCase() : `${token}@client.instaflow`;
-          const userUuid = toValidUuid(token);
-          const name = emailCandidate.split('@')[0];
-          const newUser: User = {
-            id: userUuid,
-            email: emailCandidate,
-            fullName: name.charAt(0).toUpperCase() + name.slice(1),
-            avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
-            createdAt: new Date().toISOString(),
-          };
-          await databaseService.saveUser(newUser);
-          await WorkspaceService.getOrCreateDefaultWorkspace(newUser.id, newUser.fullName);
-          return newUser;
-        } catch (err) {
-          LoggingService.warn('Could not resolve user from bearer token', err);
-        }
-      }
-    }
-
-    // 3. Resolve by x-user-id header
-    if (customUserId && customUserId !== 'undefined' && customUserId !== 'null' && customUserId !== '') {
+    if (bearerToken && bearerToken !== 'undefined' && bearerToken !== 'null' && bearerToken !== '') {
       try {
-        const user = (await databaseService.getUser(customUserId)) || (await databaseService.getUserByEmail(customUserId));
+        const user = (await databaseService.getUser(bearerToken)) || (await databaseService.getUserByEmail(bearerToken));
         if (user) return user;
 
-        const emailCandidate = customUserId.includes('@') ? customUserId.toLowerCase() : `${customUserId}@client.instaflow`;
-        const userUuid = toValidUuid(customUserId);
+        const emailCandidate = bearerToken.includes('@') ? bearerToken.toLowerCase() : `${bearerToken}@client.instaflow`;
+        const userUuid = toValidUuid(bearerToken);
+        const name = emailCandidate.split('@')[0];
+        const newUser: User = {
+          id: userUuid,
+          email: emailCandidate,
+          fullName: name.charAt(0).toUpperCase() + name.slice(1),
+          avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
+          createdAt: new Date().toISOString(),
+        };
+        await databaseService.saveUser(newUser);
+        await WorkspaceService.getOrCreateDefaultWorkspace(newUser.id, newUser.fullName);
+        return newUser;
+      } catch (err) {
+        LoggingService.warn('Could not resolve user from token', err);
+      }
+    }
+
+    // 3. Resolve by x-user-id header or queryUserId
+    const targetUserId = customUserId || queryUserId;
+    if (targetUserId && targetUserId !== 'undefined' && targetUserId !== 'null' && targetUserId !== '') {
+      try {
+        const user = (await databaseService.getUser(targetUserId)) || (await databaseService.getUserByEmail(targetUserId));
+        if (user) return user;
+
+        const emailCandidate = targetUserId.includes('@') ? targetUserId.toLowerCase() : `${targetUserId}@client.instaflow`;
+        const userUuid = toValidUuid(targetUserId);
         const name = emailCandidate.split('@')[0];
         const newUser: User = {
           id: userUuid,

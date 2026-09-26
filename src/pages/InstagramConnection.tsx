@@ -79,15 +79,31 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
     const left = window.screen.width / 2 - width / 2;
     const top = window.screen.height / 2 - height / 2;
 
+    let userEmail: string | undefined;
+    let userId: string | undefined;
+    try {
+      const stored = localStorage.getItem('instaflow_auth_user');
+      if (stored) {
+        const u = JSON.parse(stored);
+        userEmail = u.email;
+        userId = u.id;
+      }
+    } catch {}
+
+    const queryParams = new URLSearchParams();
+    if (userId) queryParams.set('userId', userId);
+    if (userEmail) queryParams.set('email', userEmail);
+    const qs = queryParams.toString() ? `?${queryParams.toString()}` : '';
+
     const popup = window.open(
-      '/api/instagram/connect',
+      `/api/instagram/connect${qs}`,
       'instagram_oauth_popup',
       `toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, copyhistory=no, width=${width}, height=${height}, top=${top}, left=${left}`
     );
 
     if (!popup || popup.closed || typeof popup.closed === 'undefined') {
       // If popup was blocked by browser, redirect current window
-      window.location.href = '/api/instagram/connect';
+      window.location.href = `/api/instagram/connect${qs}`;
       return;
     }
 
@@ -95,10 +111,19 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
     const messageListener = (event: MessageEvent) => {
       if (event.data && event.data.type === 'INSTAGRAM_CONNECTED') {
         window.removeEventListener('message', messageListener);
+        const count = event.data.mediaCount || event.data.media?.length || 0;
         setConnectResult({
           type: 'success',
-          text: `✓ Instagram account @${event.data.account?.username || 'user'} connected successfully!`,
+          text: `✓ Instagram account @${event.data.account?.username || 'user'} connected successfully! (${count} posts/reels synced)`,
         });
+        if (event.data.media && Array.isArray(event.data.media)) {
+          try {
+            localStorage.setItem('instaflow_active_reels', JSON.stringify(event.data.media));
+            if (event.data.account?.username) {
+              localStorage.setItem(`instaflow_media_${event.data.account.username}`, JSON.stringify(event.data.media));
+            }
+          } catch {}
+        }
         onRefresh();
         fetchAccounts();
       }

@@ -60,8 +60,9 @@ export default function App() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [userRes, accsRes, statsRes, autosRes, commentsRes] = await Promise.allSettled([
+      const [userRes, accRes, accsRes, statsRes, autosRes, commentsRes] = await Promise.allSettled([
         ApiClient.getCurrentUser(),
+        ApiClient.getConnectedAccount(),
         ApiClient.getInstagramAccounts(),
         ApiClient.getDashboardStats(),
         ApiClient.getAutomations(),
@@ -78,27 +79,42 @@ export default function App() {
         }
       }
 
-      if (accsRes.status === 'fulfilled') {
+      let activeAcc: InstagramAccount | null = null;
+      if (accRes.status === 'fulfilled' && accRes.value?.connected && accRes.value?.account) {
+        activeAcc = accRes.value.account;
+      } else if (accsRes.status === 'fulfilled') {
         const accounts = accsRes.value?.accounts || [];
         if (accounts.length > 0) {
-          const activeAcc = accounts.find((a) => a.isConnected) || accounts[0];
-          setConnectedAccount(activeAcc || null);
-          if (activeAcc) {
+          activeAcc = accounts.find((a) => a.isConnected) || accounts[0];
+        }
+      }
+
+      if (activeAcc) {
+        setConnectedAccount(activeAcc);
+        try {
+          localStorage.setItem('instaflow_connected_account', JSON.stringify(activeAcc));
+        } catch {}
+
+        // Fetch live media for connected account
+        ApiClient.getInstagramMedia(activeAcc.id).then((mediaRes) => {
+          if (mediaRes && mediaRes.media && mediaRes.media.length > 0) {
             try {
-              localStorage.setItem('instaflow_connected_account', JSON.stringify(activeAcc));
-            } catch {}
-          }
-        } else {
-          // If server returned 0 accounts, check if we have a locally active account
-          const cached = localStorage.getItem('instaflow_connected_account');
-          if (cached) {
-            try {
-              const parsed = JSON.parse(cached);
-              if (parsed?.username) {
-                setConnectedAccount(parsed);
+              localStorage.setItem('instaflow_active_reels', JSON.stringify(mediaRes.media));
+              if (activeAcc?.username) {
+                localStorage.setItem(`instaflow_media_${activeAcc.username}`, JSON.stringify(mediaRes.media));
               }
             } catch {}
           }
+        }).catch(() => {});
+      } else {
+        const cached = localStorage.getItem('instaflow_connected_account');
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (parsed?.username) {
+              setConnectedAccount(parsed);
+            }
+          } catch {}
         }
       }
 
@@ -125,6 +141,34 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // Listen for global postMessage from OAuth callback popup
+    const onOAuthMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'INSTAGRAM_CONNECTED') {
+        const acc = event.data.account;
+        if (acc) {
+          setConnectedAccount(acc);
+          try {
+            localStorage.setItem('instaflow_connected_account', JSON.stringify(acc));
+            if (event.data.media && Array.isArray(event.data.media)) {
+              localStorage.setItem('instaflow_active_reels', JSON.stringify(event.data.media));
+              if (acc.username) {
+                localStorage.setItem(`instaflow_media_${acc.username}`, JSON.stringify(event.data.media));
+              }
+            }
+          } catch {}
+          showToast(`✓ Instagram connected: @${acc.username}! Live content synchronized.`);
+          setActiveTab('automations');
+          setAutomationsView('builder');
+          loadData();
+        }
+      }
+    };
+
+    window.addEventListener('message', onOAuthMessage);
+    return () => window.removeEventListener('message', onOAuthMessage);
+  }, [loadData]);
+
+  useEffect(() => {
     // Check URL parameters for tab navigation, toast notifications, or OAuth callback status
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get('tab') as NavTab | null;
@@ -134,6 +178,7 @@ export default function App() {
     if (params.get('connected') === 'true') {
       showToast('Instagram account connected successfully!');
       window.history.replaceState({}, document.title, window.location.pathname);
+      loadData();
     }
     if (params.get('meta_error')) {
       showToast('Meta OAuth requires META_APP_ID in secrets. Use Instant Connect below!');
@@ -143,7 +188,7 @@ export default function App() {
       showToast(params.get('error') || 'Error during Instagram connection');
       window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, []);
+  }, [loadData]);
 
   useEffect(() => {
     loadData();

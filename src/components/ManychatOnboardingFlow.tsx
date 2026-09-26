@@ -19,6 +19,8 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
   currentConnectedAccount,
 }) => {
   const [currentStep, setCurrentStep] = useState<OnboardingStep>('select_channel');
+  const [connectStatus, setConnectStatus] = useState<'idle' | 'connecting' | 'syncing' | 'connected'>('idle');
+  const [syncedCount, setSyncedCount] = useState<number | null>(null);
 
   /**
    * Initiates the Direct Instagram Login OAuth flow:
@@ -27,18 +29,36 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
    * https://api.instagram.com/oauth/authorize
    */
   const handleConnectInstagram = () => {
+    setConnectStatus('connecting');
     const width = 600;
     const height = 750;
     const left = window.screen.width / 2 - width / 2;
     const top = window.screen.height / 2 - height / 2;
+
+    let userEmail: string | undefined;
+    let userId: string | undefined;
+    try {
+      const stored = localStorage.getItem('instaflow_auth_user');
+      if (stored) {
+        const u = JSON.parse(stored);
+        userEmail = u.email;
+        userId = u.id;
+      }
+    } catch {}
+
+    const queryParams = new URLSearchParams();
+    if (userId) queryParams.set('userId', userId);
+    if (userEmail) queryParams.set('email', userEmail);
+    const qs = queryParams.toString() ? `?${queryParams.toString()}` : '';
+
     const popup = window.open(
-      '/api/instagram/connect',
+      `/api/instagram/connect${qs}`,
       'instagram_oauth_popup',
       `toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, copyhistory=no, width=${width}, height=${height}, top=${top}, left=${left}`
     );
 
     if (!popup || popup.closed || typeof popup.closed === 'undefined') {
-      window.location.href = '/api/instagram/connect';
+      window.location.href = `/api/instagram/connect${qs}`;
       return;
     }
 
@@ -46,8 +66,14 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
       if (event.data && event.data.type === 'INSTAGRAM_CONNECTED') {
         window.removeEventListener('message', messageListener);
         if (event.data.account) {
-          onAccountConnected(event.data.account);
-          if (onBackToApp) onBackToApp();
+          setConnectStatus('syncing');
+          const count = event.data.mediaCount || event.data.media?.length || 0;
+          setSyncedCount(count);
+          setTimeout(() => {
+            setConnectStatus('connected');
+            onAccountConnected(event.data.account);
+            if (onBackToApp) onBackToApp();
+          }, 800);
         }
       }
     };
@@ -305,10 +331,33 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
               <button
                 type="button"
                 onClick={handleConnectInstagram}
-                className="w-full py-3.5 bg-[#0066ff] hover:bg-[#0052cc] text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
+                disabled={connectStatus === 'connecting' || connectStatus === 'syncing'}
+                className="w-full py-3.5 bg-[#0066ff] hover:bg-[#0052cc] text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-80"
               >
-                <InstagramIcon className="w-4 h-4" />
-                <span>Connect Instagram</span>
+                {connectStatus === 'idle' && (
+                  <>
+                    <InstagramIcon className="w-4 h-4" />
+                    <span>Connect Instagram</span>
+                  </>
+                )}
+                {connectStatus === 'connecting' && (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Connecting to Meta...</span>
+                  </>
+                )}
+                {connectStatus === 'syncing' && (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Syncing Instagram content...</span>
+                  </>
+                )}
+                {connectStatus === 'connected' && (
+                  <>
+                    <span className="text-emerald-300 font-bold">✓</span>
+                    <span>Connected{syncedCount !== null ? ` (${syncedCount} posts/reels synced)` : ''}!</span>
+                  </>
+                )}
               </button>
             </div>
           )}

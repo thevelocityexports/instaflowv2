@@ -171,15 +171,23 @@ export class InstagramService {
     }
 
     this.cleanExpiredStates();
+    const cleanState = state.trim();
+
+    // Replay protection: check if already consumed
+    if (this.consumedStates.has(cleanState)) {
+      return { isValid: false };
+    }
 
     // 1. Direct cookie match (browser sent back the same state via HttpOnly cookie)
-    if (cookieState && cookieState.trim() === state.trim()) {
+    if (cookieState && cookieState.trim() === cleanState) {
+      this.consumedStates.set(cleanState, Date.now());
+      this.oauthStates.delete(cleanState);
       return { isValid: true };
     }
 
     // 2. Stateless cryptographic HMAC signature verification (tamper-proof + 5-min TTL)
-    if (state.startsWith('ig_s_')) {
-      const parts = state.slice(5).split('.');
+    if (cleanState.startsWith('ig_s_')) {
+      const parts = cleanState.slice(5).split('.');
       if (parts.length === 4) {
         const [timeStr, safeUser, randomHex, sig] = parts;
         const timestamp = parseInt(timeStr, 10);
@@ -204,6 +212,8 @@ export class InstagramService {
             }
 
             if (isMatch) {
+              this.consumedStates.set(cleanState, Date.now());
+              this.oauthStates.delete(cleanState);
               return { isValid: true, userId: safeUser };
             }
           }
@@ -212,9 +222,10 @@ export class InstagramService {
     }
 
     // 3. In-memory map fallback
-    const stateData = this.oauthStates.get(state);
+    const stateData = this.oauthStates.get(cleanState);
     if (stateData) {
-      this.oauthStates.delete(state);
+      this.consumedStates.set(cleanState, Date.now());
+      this.oauthStates.delete(cleanState);
       const isExpired = Date.now() - stateData.createdAt > 5 * 60 * 1000;
       if (!isExpired) {
         return { isValid: true, userId: stateData.userId };

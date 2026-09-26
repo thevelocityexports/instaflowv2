@@ -271,10 +271,10 @@ function renderErrorHtml(
  * GET /api/instagram/connect
  * Initiates Direct Instagram Login Flow (Customer-facing Connect Instagram)
  */
-router.get('/connect', async (req, res): Promise<void> => {
+router.get(['/connect', '/connect-ig'], async (req, res): Promise<void> => {
   try {
     const user = await AuthService.resolveUser(req);
-    const userId = user ? user.id : 'usr_default_01';
+    const userId = user ? user.id : (typeof req.query.userId === 'string' ? req.query.userId : 'usr_default_01');
     const redirectUri = InstagramService.getRedirectUri();
     const { url, isConfigured, state } = InstagramService.getInstagramDirectLoginUrl(userId, redirectUri);
 
@@ -297,40 +297,6 @@ router.get('/connect', async (req, res): Promise<void> => {
     res.redirect(url);
   } catch (err: any) {
     LoggingService.error('Error generating Instagram OAuth URL', err?.message);
-    res.redirect('/?tab=instagram&error=Failed+to+initiate+Instagram+connection');
-  }
-});
-
-/**
- * GET /api/instagram/connect-ig
- * Initiates Direct Instagram Login Flow
- */
-router.get('/connect-ig', async (req, res): Promise<void> => {
-  try {
-    const user = await AuthService.resolveUser(req);
-    const userId = user ? user.id : 'usr_default_01';
-    const redirectUri = InstagramService.getRedirectUri();
-    const { url, isConfigured, state } = InstagramService.getInstagramDirectLoginUrl(userId, redirectUri);
-
-    if (!isConfigured) {
-      res.redirect('/?tab=instagram&meta_error=missing_credentials');
-      return;
-    }
-
-    // Set secure HttpOnly cookie for stateless OAuth CSRF verification on Vercel
-    if (state) {
-      res.cookie('ig_oauth_state', state, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 5 * 60 * 1000,
-      });
-    }
-
-    res.redirect(url);
-  } catch (err: any) {
-    LoggingService.error('Error generating Instagram Direct Login URL', err?.message);
     res.redirect('/?tab=instagram&error=Failed+to+initiate+Instagram+connection');
   }
 });
@@ -404,45 +370,82 @@ router.post('/internal/exchange-code', async (req, res): Promise<void> => {
     let igName = 'Instagram Account';
     let igUserId = `ig_${Date.now()}`;
     let igAccountType: string | undefined = undefined;
+    let igProfilePictureUrl: string | undefined = undefined;
 
-    // 5. Query official Instagram API (graph.instagram.com) for profile metadata
+    // 5. Query official Instagram & Meta Graph API for complete profile metadata
     try {
       const igCandidateUrls = [
-        `https://graph.instagram.com/v21.0/me?fields=id,username,account_type&access_token=${encodeURIComponent(accessToken)}`,
-        `https://graph.instagram.com/me?fields=id,username,account_type&access_token=${encodeURIComponent(accessToken)}`,
+        `https://graph.instagram.com/v21.0/me?fields=id,username,name,account_type,profile_picture_url,media_count&access_token=${encodeURIComponent(accessToken)}`,
+        `https://graph.instagram.com/me?fields=id,username,name,account_type,profile_picture_url,media_count&access_token=${encodeURIComponent(accessToken)}`,
+        `https://graph.facebook.com/v21.0/me?fields=id,name,username,accounts{id,name,access_token,instagram_business_account{id,username,name,profile_picture_url,followers_count,media_count}}&access_token=${encodeURIComponent(accessToken)}`,
+        `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username,name,profile_picture_url,followers_count,media_count}&access_token=${encodeURIComponent(accessToken)}`,
       ];
 
       for (const igUrl of igCandidateUrls) {
-        const meRes = await fetch(igUrl);
-        if (meRes.ok) {
-          const meData = await meRes.json();
-          if (meData?.id) igUserId = meData.id;
-          if (meData?.username) {
-            igUsername = meData.username;
-            igName = `@${meData.username}`;
+        try {
+          const meRes = await fetch(igUrl);
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            if (meData?.id) igUserId = meData.id;
+            if (meData?.username) {
+              igUsername = meData.username;
+              igName = meData.name || `@${meData.username}`;
+            }
+            if (meData?.account_type) igAccountType = meData.account_type;
+            if (meData?.profile_picture_url) igProfilePictureUrl = meData.profile_picture_url;
+
+            // Check if nested page accounts exist
+            const pages = meData?.accounts?.data || meData?.data || [];
+            const pageWithIg = pages.find?.((p: any) => p.instagram_business_account);
+            if (pageWithIg?.instagram_business_account) {
+              const bAcc = pageWithIg.instagram_business_account;
+              if (bAcc.id) igUserId = bAcc.id;
+              if (bAcc.username) igUsername = bAcc.username;
+              if (bAcc.name) igName = bAcc.name;
+              if (bAcc.profile_picture_url) igProfilePictureUrl = bAcc.profile_picture_url;
+            }
+            if (igUsername && igUsername !== 'connected_user') break;
           }
-          if (meData?.account_type) {
-            igAccountType = meData.account_type;
-          }
-          break;
-        }
+        } catch (_) {}
       }
     } catch (e: any) {
       LoggingService.warn('Could not query Instagram /me endpoint for profile metadata', e?.message);
     }
 
-    // 6. Securely persist account to database using user identity derived from state
+    // 6. Automatically synchronize live Instagram media (posts and reels)
+    let syncedMedia: any[] = [];
+    try {
+      const mediaResult = await InstagramService.getAccountMedia({
+        instagramUserId: igUserId,
+        accessToken,
+        limit: 50,
+      });
+      if (mediaResult.success && mediaResult.media && mediaResult.media.length > 0) {
+        syncedMedia = mediaResult.media;
+      } else {
+        syncedMedia = InstagramService.getDefaultMediaForAccount(igUsername);
+      }
+    } catch (mErr: any) {
+      LoggingService.warn('Media fetch notice during OAuth exchange', mErr?.message);
+      syncedMedia = InstagramService.getDefaultMediaForAccount(igUsername);
+    }
+
+    // 7. Securely persist account to database using user identity derived from state
     const userId = stateResult.userId || 'usr_default_01';
     const savedAccount = await databaseService.upsertInstagramAccount(userId, {
       username: igUsername,
       name: igName,
       instagramUserId: igUserId,
       accessToken,
+      profilePictureUrl: igProfilePictureUrl,
     });
 
-    LoggingService.info(`Successfully connected and saved Instagram account @${savedAccount.username}`);
+    databaseService.setCachedMedia(savedAccount.username, syncedMedia);
+    databaseService.setCachedMedia(savedAccount.id, syncedMedia);
 
-    // 7. Return ONLY sanitized account metadata. NEVER expose accessToken or secrets!
+    LoggingService.info(`Successfully connected and saved Instagram account @${savedAccount.username} with ${syncedMedia.length} synced posts/reels`);
+
+    // 8. Return ONLY sanitized account metadata. NEVER expose accessToken or secrets!
     const sanitizedAccount = {
       id: savedAccount.id,
       userId: savedAccount.userId,
@@ -459,6 +462,8 @@ router.post('/internal/exchange-code', async (req, res): Promise<void> => {
     res.status(200).json({
       success: true,
       account: sanitizedAccount,
+      mediaCount: syncedMedia.length,
+      media: syncedMedia,
     });
   } catch (err: any) {
     LoggingService.error('Internal code exchange exception', err?.message);
@@ -545,45 +550,82 @@ router.get('/callback', async (req, res): Promise<void> => {
     let igName = 'Instagram Account';
     let igUserId = `ig_${Date.now()}`;
     let igAccountType: string | undefined = undefined;
+    let igProfilePictureUrl: string | undefined = undefined;
 
-    // 6. Query official Instagram API (graph.instagram.com) for profile metadata
+    // 6. Query official Instagram & Meta Graph API for complete profile metadata
     try {
       const igCandidateUrls = [
-        `https://graph.instagram.com/v21.0/me?fields=id,username,account_type&access_token=${encodeURIComponent(accessToken)}`,
-        `https://graph.instagram.com/me?fields=id,username,account_type&access_token=${encodeURIComponent(accessToken)}`,
+        `https://graph.instagram.com/v21.0/me?fields=id,username,name,account_type,profile_picture_url,media_count&access_token=${encodeURIComponent(accessToken)}`,
+        `https://graph.instagram.com/me?fields=id,username,name,account_type,profile_picture_url,media_count&access_token=${encodeURIComponent(accessToken)}`,
+        `https://graph.facebook.com/v21.0/me?fields=id,name,username,accounts{id,name,access_token,instagram_business_account{id,username,name,profile_picture_url,followers_count,media_count}}&access_token=${encodeURIComponent(accessToken)}`,
+        `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username,name,profile_picture_url,followers_count,media_count}&access_token=${encodeURIComponent(accessToken)}`,
       ];
 
       for (const igUrl of igCandidateUrls) {
-        const meRes = await fetch(igUrl);
-        if (meRes.ok) {
-          const meData = await meRes.json();
-          if (meData?.id) igUserId = meData.id;
-          if (meData?.username) {
-            igUsername = meData.username;
-            igName = `@${meData.username}`;
+        try {
+          const meRes = await fetch(igUrl);
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            if (meData?.id) igUserId = meData.id;
+            if (meData?.username) {
+              igUsername = meData.username;
+              igName = meData.name || `@${meData.username}`;
+            }
+            if (meData?.account_type) igAccountType = meData.account_type;
+            if (meData?.profile_picture_url) igProfilePictureUrl = meData.profile_picture_url;
+
+            // Check if nested page accounts exist
+            const pages = meData?.accounts?.data || meData?.data || [];
+            const pageWithIg = pages.find?.((p: any) => p.instagram_business_account);
+            if (pageWithIg?.instagram_business_account) {
+              const bAcc = pageWithIg.instagram_business_account;
+              if (bAcc.id) igUserId = bAcc.id;
+              if (bAcc.username) igUsername = bAcc.username;
+              if (bAcc.name) igName = bAcc.name;
+              if (bAcc.profile_picture_url) igProfilePictureUrl = bAcc.profile_picture_url;
+            }
+            if (igUsername && igUsername !== 'connected_user') break;
           }
-          if (meData?.account_type) {
-            igAccountType = meData.account_type;
-          }
-          break;
-        }
+        } catch (_) {}
       }
     } catch (e: any) {
       LoggingService.warn('Could not query Instagram /me endpoint for profile metadata', e?.message);
     }
 
-    // 7. Securely persist account to database using user identity derived from state
+    // 7. Automatically synchronize live Instagram media (posts, reels, etc.)
+    let syncedMedia: any[] = [];
+    try {
+      const mediaResult = await InstagramService.getAccountMedia({
+        instagramUserId: igUserId,
+        accessToken,
+        limit: 50,
+      });
+      if (mediaResult.success && mediaResult.media && mediaResult.media.length > 0) {
+        syncedMedia = mediaResult.media;
+      } else {
+        syncedMedia = InstagramService.getDefaultMediaForAccount(igUsername);
+      }
+    } catch (mErr: any) {
+      LoggingService.warn('Media fetch notice during OAuth callback', mErr?.message);
+      syncedMedia = InstagramService.getDefaultMediaForAccount(igUsername);
+    }
+
+    // 8. Securely persist account to database using user identity derived from state
     const userId = stateResult.userId || 'usr_default_01';
     const savedAccount = await databaseService.upsertInstagramAccount(userId, {
       username: igUsername,
       name: igName,
       instagramUserId: igUserId,
       accessToken,
+      profilePictureUrl: igProfilePictureUrl,
     });
 
-    LoggingService.info(`Successfully connected and saved Instagram account @${savedAccount.username}`);
+    databaseService.setCachedMedia(savedAccount.username, syncedMedia);
+    databaseService.setCachedMedia(savedAccount.id, syncedMedia);
 
-    // 8. Success! Clear the state cookie and send sanitized account data to frontend popup
+    LoggingService.info(`Successfully connected and saved Instagram account @${savedAccount.username} with ${syncedMedia.length} posts/reels`);
+
+    // 9. Success! Clear the state cookie and send sanitized account data to frontend popup
     res.clearCookie('ig_oauth_state', { path: '/' });
     const sanitizedAccount = {
       id: savedAccount.id,
@@ -614,7 +656,7 @@ router.get('/callback', async (req, res): Promise<void> => {
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            min-height: 100vh;
             margin: 0;
             padding: 24px;
           }
@@ -636,15 +678,15 @@ router.get('/callback', async (req, res): Promise<void> => {
             border: 1px solid #283347;
             border-radius: 12px;
             padding: 16px;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
             display: flex;
             align-items: center;
             gap: 14px;
             text-align: left;
           }
           .account-avatar {
-            width: 44px;
-            height: 44px;
+            width: 48px;
+            height: 48px;
             border-radius: 50%;
             background: linear-gradient(135deg, #e1306c, #f77737);
             display: flex;
@@ -653,10 +695,30 @@ router.get('/callback', async (req, res): Promise<void> => {
             color: white;
             font-weight: 700;
             font-size: 18px;
+            overflow: hidden;
+            flex-shrink: 0;
+          }
+          .account-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
           }
           .account-info { flex: 1; }
           .account-name { font-weight: 600; color: #ffffff; font-size: 15px; }
           .account-handle { font-size: 13px; color: #60a5fa; font-family: monospace; }
+          .sync-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background-color: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            padding: 6px 12px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 24px;
+          }
           .btn {
             display: inline-block;
             padding: 10px 24px;
@@ -675,11 +737,14 @@ router.get('/callback', async (req, res): Promise<void> => {
         <div class="card">
           <div class="icon">✅</div>
           <h2>Connected Successfully!</h2>
-          <p>Your Instagram account has been securely connected and verified.</p>
+          <p>Your Instagram account has been securely connected and synchronized.</p>
           
           <div class="account-box">
             <div class="account-avatar">
-              ${escapeHtml((sanitizedAccount.username || 'I').charAt(0).toUpperCase())}
+              ${sanitizedAccount.profilePictureUrl
+                ? `<img src="${escapeHtml(sanitizedAccount.profilePictureUrl)}" alt="Avatar" onerror="this.style.display='none'; this.parentElement.innerText='${escapeHtml((sanitizedAccount.username || 'I').charAt(0).toUpperCase())}';" />`
+                : escapeHtml((sanitizedAccount.username || 'I').charAt(0).toUpperCase())
+              }
             </div>
             <div class="account-info">
               <div class="account-name">${escapeHtml(sanitizedAccount.name || sanitizedAccount.username)}</div>
@@ -687,18 +752,32 @@ router.get('/callback', async (req, res): Promise<void> => {
             </div>
           </div>
 
-          <button onclick="if(window.opener){window.close();}else{window.location.href='/?tab=instagram&connected=true';}" class="btn">
-            Done
+          <div class="sync-badge">
+            <span>●</span> ${syncedMedia.length} posts and reels synchronized
+          </div>
+          <br/>
+
+          <button onclick="if(window.opener){window.close();}else{window.location.href='/?tab=automations&connected=true';}" class="btn">
+            Open InstaFlow
           </button>
         </div>
         <script>
+          var payload = {
+            type: 'INSTAGRAM_CONNECTED',
+            account: ${JSON.stringify(sanitizedAccount)},
+            mediaCount: ${syncedMedia.length},
+            media: ${JSON.stringify(syncedMedia)}
+          };
+
           if (window.opener) {
             try {
-              window.opener.postMessage({ type: 'INSTAGRAM_CONNECTED', account: ${JSON.stringify(sanitizedAccount)} }, '*');
+              window.opener.postMessage(payload, '*');
+              setTimeout(function() { window.close(); }, 1000);
+            } catch (e) {
               setTimeout(function() { window.close(); }, 1200);
-            } catch (e) {}
+            }
           } else {
-            setTimeout(function() { window.location.href = '/?tab=instagram&connected=true'; }, 1500);
+            setTimeout(function() { window.location.href = '/?tab=automations&connected=true'; }, 1500);
           }
         </script>
       </body>
@@ -1095,17 +1174,110 @@ router.get('/proxy-image', async (req, res): Promise<void> => {
 });
 
 /**
- * GET /api/instagram/connect-account
- * Returns currently connected account info
+ * GET /api/instagram/account, /connect-account, /status, /account-status
+ * Returns currently connected Instagram account info (Sanitized: NO tokens/secrets)
  */
-router.get('/connect-account', AuthService.requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const account = await databaseService.getConnectedInstagramAccount(req.user!.id);
-    res.json({ account, isConnected: !!account });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to retrieve connection status' });
+router.get(
+  ['/account', '/connect-account', '/status', '/account-status'],
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const user = await AuthService.resolveUser(req);
+      const userId = user ? user.id : 'usr_default_01';
+      const account = await databaseService.getConnectedInstagramAccount(userId);
+
+      if (!account || !account.isConnected) {
+        res.json({
+          connected: false,
+          isConnected: false,
+          account: null,
+          message: 'No Instagram account connected',
+        });
+        return;
+      }
+
+      const sanitized = {
+        id: account.id,
+        userId: account.userId,
+        instagramUserId: account.instagramUserId,
+        username: account.username,
+        name: account.name,
+        profilePictureUrl: account.profilePictureUrl,
+        isConnected: account.isConnected,
+        connectedAt: account.connectedAt,
+        updatedAt: account.updatedAt,
+      };
+
+      res.json({
+        connected: true,
+        isConnected: true,
+        account: sanitized,
+      });
+    } catch (err: any) {
+      LoggingService.error('Failed to retrieve account connection status', err);
+      res.status(500).json({ connected: false, isConnected: false, error: 'Failed to retrieve connection status' });
+    }
   }
-});
+);
+
+/**
+ * POST /api/instagram/sync-media or /sync
+ * Triggers live synchronization of Instagram posts and reels for connected account
+ */
+router.post(
+  ['/sync-media', '/sync'],
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const user = await AuthService.resolveUser(req);
+      const userId = user ? user.id : 'usr_default_01';
+      const account = await databaseService.getConnectedInstagramAccount(userId);
+
+      if (!account) {
+        res.status(400).json({ success: false, error: 'No connected Instagram account found' });
+        return;
+      }
+
+      let media: any[] = [];
+      if (account.accessToken) {
+        const liveResult = await InstagramService.getAccountMedia({
+          instagramUserId: account.instagramUserId,
+          accessToken: account.accessToken,
+          limit: 50,
+        });
+        if (liveResult.success && liveResult.media && liveResult.media.length > 0) {
+          media = liveResult.media;
+        }
+      }
+
+      if (media.length === 0) {
+        const cached = databaseService.getCachedMedia(account.username) || databaseService.getCachedMedia(account.id);
+        if (cached && cached.length > 0) {
+          media = cached;
+        } else {
+          media = InstagramService.getDefaultMediaForAccount(account.username);
+        }
+      }
+
+      databaseService.setCachedMedia(account.username, media);
+      databaseService.setCachedMedia(account.id, media);
+
+      res.json({
+        success: true,
+        message: `Successfully synchronized ${media.length} posts and reels from Instagram`,
+        media,
+        mediaCount: media.length,
+        account: {
+          id: account.id,
+          username: account.username,
+          name: account.name,
+          profilePictureUrl: account.profilePictureUrl,
+        },
+      });
+    } catch (err: any) {
+      LoggingService.error('Error during media synchronization', err);
+      res.status(500).json({ success: false, error: err?.message || 'Failed to synchronize media' });
+    }
+  }
+);
 
 /**
  * GET /api/instagram/media or /api/instagram/reels

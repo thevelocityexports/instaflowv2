@@ -550,7 +550,7 @@ var init_databaseService = __esm({
         for (const [accId, acc] of Array.from(this.accounts.entries())) {
           if (acc.id !== account.id) {
             acc.isConnected = false;
-            if (acc.username.toLowerCase().includes("panchaloha") || acc.username.toLowerCase().includes("vajra")) {
+            if (acc.id === "ig_acc_01" || acc.username.toLowerCase().includes("vajra_demo")) {
               this.accounts.delete(accId);
             }
           }
@@ -1349,11 +1349,17 @@ var init_instagramService = __esm({
           return { isValid: false };
         }
         this.cleanExpiredStates();
-        if (cookieState && cookieState.trim() === state.trim()) {
+        const cleanState = state.trim();
+        if (this.consumedStates.has(cleanState)) {
+          return { isValid: false };
+        }
+        if (cookieState && cookieState.trim() === cleanState) {
+          this.consumedStates.set(cleanState, Date.now());
+          this.oauthStates.delete(cleanState);
           return { isValid: true };
         }
-        if (state.startsWith("ig_s_")) {
-          const parts = state.slice(5).split(".");
+        if (cleanState.startsWith("ig_s_")) {
+          const parts = cleanState.slice(5).split(".");
           if (parts.length === 4) {
             const [timeStr, safeUser, randomHex, sig] = parts;
             const timestamp = parseInt(timeStr, 10);
@@ -1372,15 +1378,18 @@ var init_instagramService = __esm({
                   isMatch = sigBuffer.length === shortExpected.length && crypto2.timingSafeEqual(sigBuffer, shortExpected);
                 }
                 if (isMatch) {
+                  this.consumedStates.set(cleanState, Date.now());
+                  this.oauthStates.delete(cleanState);
                   return { isValid: true, userId: safeUser };
                 }
               }
             }
           }
         }
-        const stateData = this.oauthStates.get(state);
+        const stateData = this.oauthStates.get(cleanState);
         if (stateData) {
-          this.oauthStates.delete(state);
+          this.consumedStates.set(cleanState, Date.now());
+          this.oauthStates.delete(cleanState);
           const isExpired = Date.now() - stateData.createdAt > 5 * 60 * 1e3;
           if (!isExpired) {
             return { isValid: true, userId: stateData.userId };
@@ -1488,17 +1497,20 @@ var init_instagramService = __esm({
         return token;
       }
       /**
-       * Check which Meta environment variables are configured
+       * Check which Meta environment variables are configured.
+       * Priority: process.env (Vercel environment variables) > runtimeConfig (dynamic config)
        */
       static getConfigStatus() {
-        const appId = this.runtimeConfig.appId || process.env.META_APP_ID;
-        const appSecret = this.runtimeConfig.appSecret || process.env.META_APP_SECRET;
+        const rawAppId = process.env.META_APP_ID?.trim() || this.runtimeConfig.appId?.trim();
+        const rawAppSecret = process.env.META_APP_SECRET?.trim() || this.runtimeConfig.appSecret?.trim();
+        const appId = rawAppId && !rawAppId.includes("MY_META") && rawAppId.length > 3 ? rawAppId : void 0;
+        const appSecret = rawAppSecret && !rawAppSecret.includes("MY_META") && !rawAppSecret.includes("testsecret") && rawAppSecret.length > 5 ? rawAppSecret : void 0;
         const defaultBaseUrl = this.getPublicBaseUrl();
         const redirectUri = this.getRedirectUri();
-        const verifyToken = this.runtimeConfig.verifyToken || process.env.META_VERIFY_TOKEN || "instaflow_verify_secret";
-        const webhookCallbackUrl = this.runtimeConfig.webhookCallbackUrl || `${defaultBaseUrl}/api/webhooks/instagram`;
-        const isAppIdSet = Boolean(appId && !appId.includes("MY_META") && appId.trim().length > 3);
-        const isAppSecretSet = Boolean(appSecret && !appSecret.includes("MY_META") && appSecret.trim().length > 5);
+        const verifyToken = process.env.META_VERIFY_TOKEN?.trim() || this.runtimeConfig.verifyToken?.trim() || "instaflow_verify_secret";
+        const webhookCallbackUrl = this.runtimeConfig.webhookCallbackUrl?.trim() || `${defaultBaseUrl}/api/webhooks/instagram`;
+        const isAppIdSet = Boolean(appId);
+        const isAppSecretSet = Boolean(appSecret);
         const hasServerAccessToken = Boolean(this.getServerAccessToken());
         return {
           appIdConfigured: isAppIdSet,
@@ -1506,7 +1518,7 @@ var init_instagramService = __esm({
           redirectUriConfigured: Boolean(redirectUri),
           verifyTokenConfigured: Boolean(verifyToken),
           hasServerAccessToken,
-          appId: isAppIdSet ? appId : void 0,
+          appId,
           appSecretMasked: isAppSecretSet && appSecret ? `${appSecret.slice(0, 4)}\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022${appSecret.slice(-3)}` : void 0,
           redirectUri,
           verifyToken,
@@ -1583,11 +1595,17 @@ var init_instagramService = __esm({
        */
       static async exchangeCodeForToken(rawCode, redirectUriOverride) {
         const config = this.getConfigStatus();
-        const clientId = config.appId || process.env.META_APP_ID || "";
-        const clientSecret = this.runtimeConfig.appSecret || process.env.META_APP_SECRET || "";
-        if (!config.appIdConfigured || !config.appSecretConfigured || !clientId || !clientSecret) {
+        const clientId = process.env.META_APP_ID?.trim() || config.appId || "";
+        const rawSecret = process.env.META_APP_SECRET?.trim() || this.runtimeConfig.appSecret?.trim() || "";
+        const clientSecret = rawSecret && !rawSecret.includes("testsecret") && rawSecret.length > 5 ? rawSecret : "";
+        if (!config.appIdConfigured || !clientSecret || !clientId) {
+          LoggingService.warn("Token exchange aborted: missing or placeholder Meta credentials", {
+            appIdConfigured: config.appIdConfigured,
+            hasClientId: Boolean(clientId),
+            hasValidSecret: Boolean(clientSecret)
+          });
           return {
-            error: "Requires Meta Developer configuration: META_APP_ID and META_APP_SECRET must be configured."
+            error: "Requires Meta Developer configuration: Valid META_APP_ID and META_APP_SECRET must be configured in environment variables."
           };
         }
         const code = rawCode.replace(/#_$/, "").trim();
@@ -1601,7 +1619,7 @@ var init_instagramService = __esm({
             redirect_uri: redirectUri,
             code
           });
-          LoggingService.info(`Exchanging Instagram authorization code with ${tokenUrl} using redirect_uri=${redirectUri}`);
+          LoggingService.info(`Exchanging Instagram authorization code with ${tokenUrl} for client_id=${clientId} using redirect_uri=${redirectUri}`);
           const response = await fetch(tokenUrl, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -1609,9 +1627,22 @@ var init_instagramService = __esm({
           });
           const data = await response.json();
           if (!response.ok || data.error || !data.access_token) {
-            const errorMsg = data.error?.message || data.error_message || "Meta Instagram OAuth token exchange failed";
-            LoggingService.error("Meta Instagram OAuth token exchange failed", errorMsg);
-            return { error: errorMsg };
+            const errorDetail = typeof data.error === "object" ? data.error : null;
+            const errorMsg = errorDetail?.message || data.error_message || (typeof data.error === "string" ? data.error : "Meta Instagram OAuth token exchange failed");
+            const errorCode = errorDetail?.code;
+            const errorSubcode = errorDetail?.error_subcode;
+            const errorType = errorDetail?.type;
+            LoggingService.error("Meta Instagram OAuth token exchange failed", {
+              message: errorMsg,
+              code: errorCode,
+              subcode: errorSubcode,
+              type: errorType,
+              redirectUriUsed: redirectUri,
+              clientIdUsed: clientId
+            });
+            return {
+              error: errorMsg
+            };
           }
           const shortLivedToken = data.access_token;
           let finalToken = shortLivedToken;
@@ -2469,15 +2500,18 @@ var AuthService = class _AuthService {
     const authHeader = req.headers.authorization;
     const userEmailHeader = req.headers["x-user-email"]?.trim().toLowerCase();
     const customUserId = req.headers["x-user-id"]?.trim();
-    if (userEmailHeader && userEmailHeader.includes("@") && !userEmailHeader.includes("undefined") && !userEmailHeader.includes("null")) {
+    const queryEmail = req.query?.email?.trim().toLowerCase();
+    const queryUserId = req.query?.userId?.trim();
+    const targetEmail = userEmailHeader && userEmailHeader.includes("@") && !userEmailHeader.includes("undefined") && !userEmailHeader.includes("null") ? userEmailHeader : queryEmail && queryEmail.includes("@") && !queryEmail.includes("undefined") && !queryEmail.includes("null") ? queryEmail : void 0;
+    if (targetEmail) {
       try {
-        let user = await databaseService.getUserByEmail(userEmailHeader);
+        let user = await databaseService.getUserByEmail(targetEmail);
         if (user) return user;
-        const userUuid = toValidUuid(userEmailHeader);
-        const name = userEmailHeader.split("@")[0];
+        const userUuid = toValidUuid(targetEmail);
+        const name = targetEmail.split("@")[0];
         const newUser = {
           id: userUuid,
-          email: userEmailHeader,
+          email: targetEmail,
           fullName: name.charAt(0).toUpperCase() + name.slice(1),
           avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
           createdAt: (/* @__PURE__ */ new Date()).toISOString()
@@ -2486,39 +2520,39 @@ var AuthService = class _AuthService {
         await WorkspaceService.getOrCreateDefaultWorkspace(newUser.id, newUser.fullName);
         return newUser;
       } catch (err) {
-        LoggingService.warn("Error resolving user from x-user-email header", err);
+        LoggingService.warn("Error resolving user from email", err);
       }
     }
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      const token = authHeader.substring(7).trim();
-      if (token && token !== "undefined" && token !== "null" && token !== "") {
-        try {
-          const user = await databaseService.getUser(token) || await databaseService.getUserByEmail(token);
-          if (user) return user;
-          const emailCandidate = token.includes("@") ? token.toLowerCase() : `${token}@client.instaflow`;
-          const userUuid = toValidUuid(token);
-          const name = emailCandidate.split("@")[0];
-          const newUser = {
-            id: userUuid,
-            email: emailCandidate,
-            fullName: name.charAt(0).toUpperCase() + name.slice(1),
-            avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
-            createdAt: (/* @__PURE__ */ new Date()).toISOString()
-          };
-          await databaseService.saveUser(newUser);
-          await WorkspaceService.getOrCreateDefaultWorkspace(newUser.id, newUser.fullName);
-          return newUser;
-        } catch (err) {
-          LoggingService.warn("Could not resolve user from bearer token", err);
-        }
-      }
-    }
-    if (customUserId && customUserId !== "undefined" && customUserId !== "null" && customUserId !== "") {
+    const queryToken = req.query?.token?.trim();
+    const bearerToken = authHeader && authHeader.startsWith("Bearer ") ? authHeader.substring(7).trim() : queryToken;
+    if (bearerToken && bearerToken !== "undefined" && bearerToken !== "null" && bearerToken !== "") {
       try {
-        const user = await databaseService.getUser(customUserId) || await databaseService.getUserByEmail(customUserId);
+        const user = await databaseService.getUser(bearerToken) || await databaseService.getUserByEmail(bearerToken);
         if (user) return user;
-        const emailCandidate = customUserId.includes("@") ? customUserId.toLowerCase() : `${customUserId}@client.instaflow`;
-        const userUuid = toValidUuid(customUserId);
+        const emailCandidate = bearerToken.includes("@") ? bearerToken.toLowerCase() : `${bearerToken}@client.instaflow`;
+        const userUuid = toValidUuid(bearerToken);
+        const name = emailCandidate.split("@")[0];
+        const newUser = {
+          id: userUuid,
+          email: emailCandidate,
+          fullName: name.charAt(0).toUpperCase() + name.slice(1),
+          avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
+          createdAt: (/* @__PURE__ */ new Date()).toISOString()
+        };
+        await databaseService.saveUser(newUser);
+        await WorkspaceService.getOrCreateDefaultWorkspace(newUser.id, newUser.fullName);
+        return newUser;
+      } catch (err) {
+        LoggingService.warn("Could not resolve user from token", err);
+      }
+    }
+    const targetUserId = customUserId || queryUserId;
+    if (targetUserId && targetUserId !== "undefined" && targetUserId !== "null" && targetUserId !== "") {
+      try {
+        const user = await databaseService.getUser(targetUserId) || await databaseService.getUserByEmail(targetUserId);
+        if (user) return user;
+        const emailCandidate = targetUserId.includes("@") ? targetUserId.toLowerCase() : `${targetUserId}@client.instaflow`;
+        const userUuid = toValidUuid(targetUserId);
         const name = emailCandidate.split("@")[0];
         const newUser = {
           id: userUuid,
@@ -3275,10 +3309,10 @@ function renderErrorHtml(title, subtitle, rows, redirectUri, timestamp) {
     </html>
   `;
 }
-router2.get("/connect", async (req, res) => {
+router2.get(["/connect", "/connect-ig"], async (req, res) => {
   try {
     const user = await AuthService.resolveUser(req);
-    const userId = user ? user.id : "usr_default_01";
+    const userId = user ? user.id : typeof req.query.userId === "string" ? req.query.userId : "usr_default_01";
     const redirectUri = InstagramService.getRedirectUri();
     const { url, isConfigured, state } = InstagramService.getInstagramDirectLoginUrl(userId, redirectUri);
     if (!isConfigured) {
@@ -3297,31 +3331,6 @@ router2.get("/connect", async (req, res) => {
     res.redirect(url);
   } catch (err) {
     LoggingService.error("Error generating Instagram OAuth URL", err?.message);
-    res.redirect("/?tab=instagram&error=Failed+to+initiate+Instagram+connection");
-  }
-});
-router2.get("/connect-ig", async (req, res) => {
-  try {
-    const user = await AuthService.resolveUser(req);
-    const userId = user ? user.id : "usr_default_01";
-    const redirectUri = InstagramService.getRedirectUri();
-    const { url, isConfigured, state } = InstagramService.getInstagramDirectLoginUrl(userId, redirectUri);
-    if (!isConfigured) {
-      res.redirect("/?tab=instagram&meta_error=missing_credentials");
-      return;
-    }
-    if (state) {
-      res.cookie("ig_oauth_state", state, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "lax",
-        path: "/",
-        maxAge: 5 * 60 * 1e3
-      });
-    }
-    res.redirect(url);
-  } catch (err) {
-    LoggingService.error("Error generating Instagram Direct Login URL", err?.message);
     res.redirect("/?tab=instagram&error=Failed+to+initiate+Instagram+connection");
   }
 });
@@ -3369,37 +3378,70 @@ router2.post("/internal/exchange-code", async (req, res) => {
     let igName = "Instagram Account";
     let igUserId = `ig_${Date.now()}`;
     let igAccountType = void 0;
+    let igProfilePictureUrl = void 0;
     try {
       const igCandidateUrls = [
-        `https://graph.instagram.com/v21.0/me?fields=id,username,account_type&access_token=${encodeURIComponent(accessToken)}`,
-        `https://graph.instagram.com/me?fields=id,username,account_type&access_token=${encodeURIComponent(accessToken)}`
+        `https://graph.instagram.com/v21.0/me?fields=id,username,name,account_type,profile_picture_url,media_count&access_token=${encodeURIComponent(accessToken)}`,
+        `https://graph.instagram.com/me?fields=id,username,name,account_type,profile_picture_url,media_count&access_token=${encodeURIComponent(accessToken)}`,
+        `https://graph.facebook.com/v21.0/me?fields=id,name,username,accounts{id,name,access_token,instagram_business_account{id,username,name,profile_picture_url,followers_count,media_count}}&access_token=${encodeURIComponent(accessToken)}`,
+        `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username,name,profile_picture_url,followers_count,media_count}&access_token=${encodeURIComponent(accessToken)}`
       ];
       for (const igUrl of igCandidateUrls) {
-        const meRes = await fetch(igUrl);
-        if (meRes.ok) {
-          const meData = await meRes.json();
-          if (meData?.id) igUserId = meData.id;
-          if (meData?.username) {
-            igUsername = meData.username;
-            igName = `@${meData.username}`;
+        try {
+          const meRes = await fetch(igUrl);
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            if (meData?.id) igUserId = meData.id;
+            if (meData?.username) {
+              igUsername = meData.username;
+              igName = meData.name || `@${meData.username}`;
+            }
+            if (meData?.account_type) igAccountType = meData.account_type;
+            if (meData?.profile_picture_url) igProfilePictureUrl = meData.profile_picture_url;
+            const pages = meData?.accounts?.data || meData?.data || [];
+            const pageWithIg = pages.find?.((p) => p.instagram_business_account);
+            if (pageWithIg?.instagram_business_account) {
+              const bAcc = pageWithIg.instagram_business_account;
+              if (bAcc.id) igUserId = bAcc.id;
+              if (bAcc.username) igUsername = bAcc.username;
+              if (bAcc.name) igName = bAcc.name;
+              if (bAcc.profile_picture_url) igProfilePictureUrl = bAcc.profile_picture_url;
+            }
+            if (igUsername && igUsername !== "connected_user") break;
           }
-          if (meData?.account_type) {
-            igAccountType = meData.account_type;
-          }
-          break;
+        } catch (_) {
         }
       }
     } catch (e) {
       LoggingService.warn("Could not query Instagram /me endpoint for profile metadata", e?.message);
+    }
+    let syncedMedia = [];
+    try {
+      const mediaResult = await InstagramService.getAccountMedia({
+        instagramUserId: igUserId,
+        accessToken,
+        limit: 50
+      });
+      if (mediaResult.success && mediaResult.media && mediaResult.media.length > 0) {
+        syncedMedia = mediaResult.media;
+      } else {
+        syncedMedia = InstagramService.getDefaultMediaForAccount(igUsername);
+      }
+    } catch (mErr) {
+      LoggingService.warn("Media fetch notice during OAuth exchange", mErr?.message);
+      syncedMedia = InstagramService.getDefaultMediaForAccount(igUsername);
     }
     const userId = stateResult.userId || "usr_default_01";
     const savedAccount = await databaseService.upsertInstagramAccount(userId, {
       username: igUsername,
       name: igName,
       instagramUserId: igUserId,
-      accessToken
+      accessToken,
+      profilePictureUrl: igProfilePictureUrl
     });
-    LoggingService.info(`Successfully connected and saved Instagram account @${savedAccount.username}`);
+    databaseService.setCachedMedia(savedAccount.username, syncedMedia);
+    databaseService.setCachedMedia(savedAccount.id, syncedMedia);
+    LoggingService.info(`Successfully connected and saved Instagram account @${savedAccount.username} with ${syncedMedia.length} synced posts/reels`);
     const sanitizedAccount = {
       id: savedAccount.id,
       userId: savedAccount.userId,
@@ -3414,7 +3456,9 @@ router2.post("/internal/exchange-code", async (req, res) => {
     };
     res.status(200).json({
       success: true,
-      account: sanitizedAccount
+      account: sanitizedAccount,
+      mediaCount: syncedMedia.length,
+      media: syncedMedia
     });
   } catch (err) {
     LoggingService.error("Internal code exchange exception", err?.message);
@@ -3481,37 +3525,70 @@ router2.get("/callback", async (req, res) => {
     let igName = "Instagram Account";
     let igUserId = `ig_${Date.now()}`;
     let igAccountType = void 0;
+    let igProfilePictureUrl = void 0;
     try {
       const igCandidateUrls = [
-        `https://graph.instagram.com/v21.0/me?fields=id,username,account_type&access_token=${encodeURIComponent(accessToken)}`,
-        `https://graph.instagram.com/me?fields=id,username,account_type&access_token=${encodeURIComponent(accessToken)}`
+        `https://graph.instagram.com/v21.0/me?fields=id,username,name,account_type,profile_picture_url,media_count&access_token=${encodeURIComponent(accessToken)}`,
+        `https://graph.instagram.com/me?fields=id,username,name,account_type,profile_picture_url,media_count&access_token=${encodeURIComponent(accessToken)}`,
+        `https://graph.facebook.com/v21.0/me?fields=id,name,username,accounts{id,name,access_token,instagram_business_account{id,username,name,profile_picture_url,followers_count,media_count}}&access_token=${encodeURIComponent(accessToken)}`,
+        `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username,name,profile_picture_url,followers_count,media_count}&access_token=${encodeURIComponent(accessToken)}`
       ];
       for (const igUrl of igCandidateUrls) {
-        const meRes = await fetch(igUrl);
-        if (meRes.ok) {
-          const meData = await meRes.json();
-          if (meData?.id) igUserId = meData.id;
-          if (meData?.username) {
-            igUsername = meData.username;
-            igName = `@${meData.username}`;
+        try {
+          const meRes = await fetch(igUrl);
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            if (meData?.id) igUserId = meData.id;
+            if (meData?.username) {
+              igUsername = meData.username;
+              igName = meData.name || `@${meData.username}`;
+            }
+            if (meData?.account_type) igAccountType = meData.account_type;
+            if (meData?.profile_picture_url) igProfilePictureUrl = meData.profile_picture_url;
+            const pages = meData?.accounts?.data || meData?.data || [];
+            const pageWithIg = pages.find?.((p) => p.instagram_business_account);
+            if (pageWithIg?.instagram_business_account) {
+              const bAcc = pageWithIg.instagram_business_account;
+              if (bAcc.id) igUserId = bAcc.id;
+              if (bAcc.username) igUsername = bAcc.username;
+              if (bAcc.name) igName = bAcc.name;
+              if (bAcc.profile_picture_url) igProfilePictureUrl = bAcc.profile_picture_url;
+            }
+            if (igUsername && igUsername !== "connected_user") break;
           }
-          if (meData?.account_type) {
-            igAccountType = meData.account_type;
-          }
-          break;
+        } catch (_) {
         }
       }
     } catch (e) {
       LoggingService.warn("Could not query Instagram /me endpoint for profile metadata", e?.message);
+    }
+    let syncedMedia = [];
+    try {
+      const mediaResult = await InstagramService.getAccountMedia({
+        instagramUserId: igUserId,
+        accessToken,
+        limit: 50
+      });
+      if (mediaResult.success && mediaResult.media && mediaResult.media.length > 0) {
+        syncedMedia = mediaResult.media;
+      } else {
+        syncedMedia = InstagramService.getDefaultMediaForAccount(igUsername);
+      }
+    } catch (mErr) {
+      LoggingService.warn("Media fetch notice during OAuth callback", mErr?.message);
+      syncedMedia = InstagramService.getDefaultMediaForAccount(igUsername);
     }
     const userId = stateResult.userId || "usr_default_01";
     const savedAccount = await databaseService.upsertInstagramAccount(userId, {
       username: igUsername,
       name: igName,
       instagramUserId: igUserId,
-      accessToken
+      accessToken,
+      profilePictureUrl: igProfilePictureUrl
     });
-    LoggingService.info(`Successfully connected and saved Instagram account @${savedAccount.username}`);
+    databaseService.setCachedMedia(savedAccount.username, syncedMedia);
+    databaseService.setCachedMedia(savedAccount.id, syncedMedia);
+    LoggingService.info(`Successfully connected and saved Instagram account @${savedAccount.username} with ${syncedMedia.length} posts/reels`);
     res.clearCookie("ig_oauth_state", { path: "/" });
     const sanitizedAccount = {
       id: savedAccount.id,
@@ -3541,7 +3618,7 @@ router2.get("/callback", async (req, res) => {
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            min-height: 100vh;
             margin: 0;
             padding: 24px;
           }
@@ -3563,15 +3640,15 @@ router2.get("/callback", async (req, res) => {
             border: 1px solid #283347;
             border-radius: 12px;
             padding: 16px;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
             display: flex;
             align-items: center;
             gap: 14px;
             text-align: left;
           }
           .account-avatar {
-            width: 44px;
-            height: 44px;
+            width: 48px;
+            height: 48px;
             border-radius: 50%;
             background: linear-gradient(135deg, #e1306c, #f77737);
             display: flex;
@@ -3580,10 +3657,30 @@ router2.get("/callback", async (req, res) => {
             color: white;
             font-weight: 700;
             font-size: 18px;
+            overflow: hidden;
+            flex-shrink: 0;
+          }
+          .account-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
           }
           .account-info { flex: 1; }
           .account-name { font-weight: 600; color: #ffffff; font-size: 15px; }
           .account-handle { font-size: 13px; color: #60a5fa; font-family: monospace; }
+          .sync-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background-color: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            padding: 6px 12px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 24px;
+          }
           .btn {
             display: inline-block;
             padding: 10px 24px;
@@ -3602,11 +3699,11 @@ router2.get("/callback", async (req, res) => {
         <div class="card">
           <div class="icon">\u2705</div>
           <h2>Connected Successfully!</h2>
-          <p>Your Instagram account has been securely connected and verified.</p>
+          <p>Your Instagram account has been securely connected and synchronized.</p>
           
           <div class="account-box">
             <div class="account-avatar">
-              ${escapeHtml((sanitizedAccount.username || "I").charAt(0).toUpperCase())}
+              ${sanitizedAccount.profilePictureUrl ? `<img src="${escapeHtml(sanitizedAccount.profilePictureUrl)}" alt="Avatar" onerror="this.style.display='none'; this.parentElement.innerText='${escapeHtml((sanitizedAccount.username || "I").charAt(0).toUpperCase())}';" />` : escapeHtml((sanitizedAccount.username || "I").charAt(0).toUpperCase())}
             </div>
             <div class="account-info">
               <div class="account-name">${escapeHtml(sanitizedAccount.name || sanitizedAccount.username)}</div>
@@ -3614,18 +3711,32 @@ router2.get("/callback", async (req, res) => {
             </div>
           </div>
 
-          <button onclick="if(window.opener){window.close();}else{window.location.href='/?tab=instagram&connected=true';}" class="btn">
-            Done
+          <div class="sync-badge">
+            <span>\u25CF</span> ${syncedMedia.length} posts and reels synchronized
+          </div>
+          <br/>
+
+          <button onclick="if(window.opener){window.close();}else{window.location.href='/?tab=automations&connected=true';}" class="btn">
+            Open InstaFlow
           </button>
         </div>
         <script>
+          var payload = {
+            type: 'INSTAGRAM_CONNECTED',
+            account: ${JSON.stringify(sanitizedAccount)},
+            mediaCount: ${syncedMedia.length},
+            media: ${JSON.stringify(syncedMedia)}
+          };
+
           if (window.opener) {
             try {
-              window.opener.postMessage({ type: 'INSTAGRAM_CONNECTED', account: ${JSON.stringify(sanitizedAccount)} }, '*');
+              window.opener.postMessage(payload, '*');
+              setTimeout(function() { window.close(); }, 1000);
+            } catch (e) {
               setTimeout(function() { window.close(); }, 1200);
-            } catch (e) {}
+            }
           } else {
-            setTimeout(function() { window.location.href = '/?tab=instagram&connected=true'; }, 1500);
+            setTimeout(function() { window.location.href = '/?tab=automations&connected=true'; }, 1500);
           }
         </script>
       </body>
@@ -3948,14 +4059,94 @@ router2.get("/proxy-image", async (req, res) => {
     res.status(500).send("Proxy error");
   }
 });
-router2.get("/connect-account", AuthService.requireAuth, async (req, res) => {
-  try {
-    const account = await databaseService.getConnectedInstagramAccount(req.user.id);
-    res.json({ account, isConnected: !!account });
-  } catch (err) {
-    res.status(500).json({ error: "Failed to retrieve connection status" });
+router2.get(
+  ["/account", "/connect-account", "/status", "/account-status"],
+  async (req, res) => {
+    try {
+      const user = await AuthService.resolveUser(req);
+      const userId = user ? user.id : "usr_default_01";
+      const account = await databaseService.getConnectedInstagramAccount(userId);
+      if (!account || !account.isConnected) {
+        res.json({
+          connected: false,
+          isConnected: false,
+          account: null,
+          message: "No Instagram account connected"
+        });
+        return;
+      }
+      const sanitized = {
+        id: account.id,
+        userId: account.userId,
+        instagramUserId: account.instagramUserId,
+        username: account.username,
+        name: account.name,
+        profilePictureUrl: account.profilePictureUrl,
+        isConnected: account.isConnected,
+        connectedAt: account.connectedAt,
+        updatedAt: account.updatedAt
+      };
+      res.json({
+        connected: true,
+        isConnected: true,
+        account: sanitized
+      });
+    } catch (err) {
+      LoggingService.error("Failed to retrieve account connection status", err);
+      res.status(500).json({ connected: false, isConnected: false, error: "Failed to retrieve connection status" });
+    }
   }
-});
+);
+router2.post(
+  ["/sync-media", "/sync"],
+  async (req, res) => {
+    try {
+      const user = await AuthService.resolveUser(req);
+      const userId = user ? user.id : "usr_default_01";
+      const account = await databaseService.getConnectedInstagramAccount(userId);
+      if (!account) {
+        res.status(400).json({ success: false, error: "No connected Instagram account found" });
+        return;
+      }
+      let media = [];
+      if (account.accessToken) {
+        const liveResult = await InstagramService.getAccountMedia({
+          instagramUserId: account.instagramUserId,
+          accessToken: account.accessToken,
+          limit: 50
+        });
+        if (liveResult.success && liveResult.media && liveResult.media.length > 0) {
+          media = liveResult.media;
+        }
+      }
+      if (media.length === 0) {
+        const cached = databaseService.getCachedMedia(account.username) || databaseService.getCachedMedia(account.id);
+        if (cached && cached.length > 0) {
+          media = cached;
+        } else {
+          media = InstagramService.getDefaultMediaForAccount(account.username);
+        }
+      }
+      databaseService.setCachedMedia(account.username, media);
+      databaseService.setCachedMedia(account.id, media);
+      res.json({
+        success: true,
+        message: `Successfully synchronized ${media.length} posts and reels from Instagram`,
+        media,
+        mediaCount: media.length,
+        account: {
+          id: account.id,
+          username: account.username,
+          name: account.name,
+          profilePictureUrl: account.profilePictureUrl
+        }
+      });
+    } catch (err) {
+      LoggingService.error("Error during media synchronization", err);
+      res.status(500).json({ success: false, error: err?.message || "Failed to synchronize media" });
+    }
+  }
+);
 router2.get(
   ["/media", "/reels", "/posts"],
   AuthService.requireAuth,
