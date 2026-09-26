@@ -34,40 +34,133 @@ export class InstagramService {
   ].join(',');
 
   private static oauthStates = new Map<string, OAuthStateData>();
-  private static readonly STATE_SECRET = process.env.SESSION_SECRET || 'instaflow_serverless_oauth_state_salt';
+  private static consumedStates = new Map<string, number>();
+  private static readonly STATE_SECRET = process.env.STATE_SECRET || process.env.SESSION_SECRET || 'instaflow_serverless_oauth_state_salt';
 
   /**
-   * Generates a cryptographically secure, stateless CSRF state token that works reliably
-   * across Vercel serverless function invocations without requiring shared server memory.
+   * Cleans up expired OAuth states and consumed replay cache
    */
-  public static createOAuthState(userId?: string): string {
+  private static cleanExpiredStates(): void {
     const now = Date.now();
-    // Clean up states older than 15 minutes
     for (const [key, val] of this.oauthStates.entries()) {
-      if (now - val.createdAt > 15 * 60 * 1000) {
+      if (now - val.createdAt > 5 * 60 * 1000) {
         this.oauthStates.delete(key);
       }
     }
+    for (const [key, timestamp] of this.consumedStates.entries()) {
+      if (now - timestamp > 10 * 60 * 1000) {
+        this.consumedStates.delete(key);
+      }
+    }
+  }
+
+  /**
+   * Generates a cryptographically secure, stateless CSRF state token that works reliably
+   * across Vercel and Cloud Run invocations without requiring shared server memory.
+   * State contains:
+   * - timestamp
+   * - authenticated internal user identifier
+   * - cryptographically random nonce
+   * - HMAC signature generated only by Cloud Run
+   */
+  public static createOAuthState(userId?: string): string {
+    const now = Date.now();
+    this.cleanExpiredStates();
 
     const randomHex = crypto.randomBytes(16).toString('hex');
     const safeUser = (userId || 'usr_default').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
     const payload = `${now}.${safeUser}.${randomHex}`;
-    const sig = crypto.createHmac('sha256', this.STATE_SECRET).update(payload).digest('hex').slice(0, 16);
+    const sig = crypto.createHmac('sha256', this.STATE_SECRET).update(payload).digest('hex');
     const stateToken = `ig_s_${payload}.${sig}`;
 
     this.oauthStates.set(stateToken, {
       createdAt: now,
-      userId,
+      userId: safeUser,
     });
     return stateToken;
   }
 
   /**
-   * Validates the OAuth CSRF state token.
-   * Supports:
-   * 1. HttpOnly cookie comparison (stateless across serverless instances)
-   * 2. Self-validating cryptographic HMAC signature + 15-minute TTL
-   * 3. In-memory storage fallback for local single-process development
+   * Validates and consumes an OAuth state token specifically for the internal code exchange.
+   * Enforces:
+   * 1. State presence & format check
+   * 2. Replay check (single-use: state has not already been consumed)
+   * 3. Maximum age check of 5 minutes (300,000 ms)
+   * 4. Constant-time cryptographic HMAC-SHA256 signature verification against Cloud Run's STATE_SECRET
+   * 5. Atomically consumes the state prior to token exchange
+   */
+  public static validateAndConsumeInternalExchangeState(
+    state: string | undefined,
+    maxAgeMs: number = 5 * 60 * 1000
+  ): { isValid: boolean; userId?: string; error?: string } {
+    if (!state || typeof state !== 'string' || !state.trim()) {
+      return { isValid: false, error: 'Missing or empty state parameter' };
+    }
+
+    this.cleanExpiredStates();
+
+    const cleanState = state.trim();
+
+    // Replay protection: check if already consumed
+    if (this.consumedStates.has(cleanState)) {
+      return { isValid: false, error: 'State has already been consumed (replay attempt detected)' };
+    }
+
+    if (!cleanState.startsWith('ig_s_')) {
+      return { isValid: false, error: 'Malformed state token format' };
+    }
+
+    const parts = cleanState.slice(5).split('.');
+    if (parts.length !== 4) {
+      return { isValid: false, error: 'Invalid state token structure' };
+    }
+
+    const [timeStr, safeUser, randomHex, sig] = parts;
+    const timestamp = parseInt(timeStr, 10);
+    if (isNaN(timestamp)) {
+      return { isValid: false, error: 'Invalid state timestamp format' };
+    }
+
+    const age = Date.now() - timestamp;
+    if (age < 0 || age > maxAgeMs) {
+      return {
+        isValid: false,
+        error: `State expired: token age is ${Math.round(age / 1000)}s (maximum allowed is ${Math.round(maxAgeMs / 1000)}s)`,
+      };
+    }
+
+    const payload = `${timestamp}.${safeUser}.${randomHex}`;
+    const expectedSigHex = crypto
+      .createHmac('sha256', this.STATE_SECRET)
+      .update(payload)
+      .digest('hex');
+
+    // Constant-time HMAC comparison to prevent timing side-channel attacks
+    const sigBuffer = Buffer.from(sig);
+    const expectedBuffer = Buffer.from(expectedSigHex);
+
+    let isMatch = false;
+    if (sigBuffer.length === expectedBuffer.length) {
+      isMatch = crypto.timingSafeEqual(sigBuffer, expectedBuffer);
+    } else if (sig.length === 16) {
+      // Compatibility with 16-hex slice
+      const shortExpected = Buffer.from(expectedSigHex.slice(0, 16));
+      isMatch = sigBuffer.length === shortExpected.length && crypto.timingSafeEqual(sigBuffer, shortExpected);
+    }
+
+    if (!isMatch) {
+      return { isValid: false, error: 'Invalid state cryptographic signature' };
+    }
+
+    // Atomically consume state before any token exchange to prevent replay
+    this.consumedStates.set(cleanState, Date.now());
+    this.oauthStates.delete(cleanState);
+
+    return { isValid: true, userId: safeUser };
+  }
+
+  /**
+   * Validates the OAuth CSRF state token with constant-time comparison and 5-minute TTL.
    */
   public static validateAndConsumeOAuthState(
     state: string | undefined,
@@ -77,12 +170,14 @@ export class InstagramService {
       return { isValid: false };
     }
 
+    this.cleanExpiredStates();
+
     // 1. Direct cookie match (browser sent back the same state via HttpOnly cookie)
     if (cookieState && cookieState.trim() === state.trim()) {
       return { isValid: true };
     }
 
-    // 2. Stateless cryptographic HMAC signature verification (tamper-proof + 15-min TTL)
+    // 2. Stateless cryptographic HMAC signature verification (tamper-proof + 5-min TTL)
     if (state.startsWith('ig_s_')) {
       const parts = state.slice(5).split('.');
       if (parts.length === 4) {
@@ -90,14 +185,25 @@ export class InstagramService {
         const timestamp = parseInt(timeStr, 10);
         if (!isNaN(timestamp)) {
           const age = Date.now() - timestamp;
-          if (age >= 0 && age < 15 * 60 * 1000) {
+          if (age >= 0 && age < 5 * 60 * 1000) {
             const payload = `${timestamp}.${safeUser}.${randomHex}`;
-            const expectedSig = crypto
+            const expectedSigHex = crypto
               .createHmac('sha256', this.STATE_SECRET)
               .update(payload)
-              .digest('hex')
-              .slice(0, 16);
-            if (sig === expectedSig) {
+              .digest('hex');
+
+            const sigBuffer = Buffer.from(sig);
+            const expectedBuffer = Buffer.from(expectedSigHex);
+
+            let isMatch = false;
+            if (sigBuffer.length === expectedBuffer.length) {
+              isMatch = crypto.timingSafeEqual(sigBuffer, expectedBuffer);
+            } else if (sig.length === 16) {
+              const shortExpected = Buffer.from(expectedSigHex.slice(0, 16));
+              isMatch = sigBuffer.length === shortExpected.length && crypto.timingSafeEqual(sigBuffer, shortExpected);
+            }
+
+            if (isMatch) {
               return { isValid: true, userId: safeUser };
             }
           }
@@ -109,7 +215,7 @@ export class InstagramService {
     const stateData = this.oauthStates.get(state);
     if (stateData) {
       this.oauthStates.delete(state);
-      const isExpired = Date.now() - stateData.createdAt > 15 * 60 * 1000;
+      const isExpired = Date.now() - stateData.createdAt > 5 * 60 * 1000;
       if (!isExpired) {
         return { isValid: true, userId: stateData.userId };
       }

@@ -5,6 +5,7 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 
@@ -20,10 +21,22 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 
 async function startServer() {
   if (process.env.NODE_ENV === 'production') {
-    app.use(express.static(path.resolve(__dirname, 'dist')));
-    app.get('*', (_req: Request, res: Response) => {
-      res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
-    });
+    const distPath = path.resolve(__dirname, 'dist');
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.get('*', (_req: Request, res: Response) => {
+        res.sendFile(path.resolve(distPath, 'index.html'));
+      });
+    } else {
+      // Standalone backend container mode (decoupled from frontend static build)
+      app.get('/', (_req: Request, res: Response) => {
+        res.status(200).json({
+          status: 'ok',
+          service: 'InstaFlow Cloud Run API Engine',
+          timestamp: new Date().toISOString(),
+        });
+      });
+    }
   } else {
     // Development mode with Vite middleware mounted
     const { createServer: createViteServer } = await import('vite');

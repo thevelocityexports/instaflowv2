@@ -2337,6 +2337,13 @@ ${linkButtonText ? `\u{1F517} ${linkButtonText}: ` : ""}${linkUrl}` : message;
   }
 });
 
+// server.ts
+import express2 from "express";
+import path4 from "path";
+import fs4 from "fs";
+import { fileURLToPath } from "url";
+import dotenv3 from "dotenv";
+
 // server/app.ts
 import express from "express";
 import dotenv2 from "dotenv";
@@ -4730,15 +4737,56 @@ app.use((err, _req, res, _next) => {
   });
 });
 
-// server/api/index.ts
-function handler(req, res) {
-  if (req.query?.__path) {
-    const p = req.query.__path;
-    req.url = p.startsWith("/") ? p : `/${p}`;
+// server.ts
+init_loggingService();
+dotenv3.config();
+var __filename = fileURLToPath(import.meta.url);
+var __dirname2 = path4.dirname(__filename);
+var PORT = parseInt(process.env.PORT || "3000", 10);
+async function startServer() {
+  if (process.env.NODE_ENV === "production") {
+    const distPath = path4.resolve(__dirname2, "dist");
+    if (fs4.existsSync(distPath)) {
+      app.use(express2.static(distPath));
+      app.get("*", (_req, res) => {
+        res.sendFile(path4.resolve(distPath, "index.html"));
+      });
+    } else {
+      app.get("/", (_req, res) => {
+        res.status(200).json({
+          status: "ok",
+          service: "InstaFlow Cloud Run API Engine",
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        });
+      });
+    }
+  } else {
+    const { createServer: createViteServer } = await import("vite");
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa"
+    });
+    app.use(vite.middlewares);
+    app.use("*", async (req, res, next) => {
+      if (req.originalUrl.startsWith("/api") || req.originalUrl.startsWith("/webhooks") || req.originalUrl.startsWith("/webhook") || path4.extname(req.originalUrl)) {
+        return next();
+      }
+      try {
+        const fs5 = await import("fs");
+        let template = fs5.readFileSync(path4.resolve(__dirname2, "index.html"), "utf-8");
+        template = await vite.transformIndexHtml(req.originalUrl, template);
+        res.status(200).set({ "Content-Type": "text/html" }).end(template);
+      } catch (e) {
+        vite.ssrFixStacktrace(e);
+        next(e);
+      }
+    });
   }
-  return app(req, res);
+  app.listen(PORT, "0.0.0.0", () => {
+    LoggingService.info(`InstaFlow Server running at http://0.0.0.0:${PORT}`);
+  });
 }
-export {
-  app,
-  handler as default
-};
+startServer().catch((err) => {
+  LoggingService.error("Failed to start server", err);
+  process.exit(1);
+});
