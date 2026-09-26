@@ -56,12 +56,12 @@ export class InstagramService {
 
   /**
    * Generates a cryptographically secure, stateless CSRF state token that works reliably
-   * across Vercel and Cloud Run invocations without requiring shared server memory.
+   * across Vercel serverless invocations without requiring shared server memory.
    * State contains:
    * - timestamp
    * - authenticated internal user identifier
    * - cryptographically random nonce
-   * - HMAC signature generated only by Cloud Run
+   * - HMAC signature generated using server STATE_SECRET
    */
   public static createOAuthState(userId?: string): string {
     const now = Date.now();
@@ -86,7 +86,7 @@ export class InstagramService {
    * 1. State presence & format check
    * 2. Replay check (single-use: state has not already been consumed)
    * 3. Maximum age check of 5 minutes (300,000 ms)
-   * 4. Constant-time cryptographic HMAC-SHA256 signature verification against Cloud Run's STATE_SECRET
+   * 4. Constant-time cryptographic HMAC-SHA256 signature verification against STATE_SECRET
    * 5. Atomically consumes the state prior to token exchange
    */
   public static validateAndConsumeInternalExchangeState(
@@ -1420,6 +1420,9 @@ export class InstagramService {
     this.pollerInterval = setInterval(() => {
       this.syncAllActiveAccounts();
     }, 12000);
+    if (this.pollerInterval && typeof this.pollerInterval.unref === 'function') {
+      this.pollerInterval.unref();
+    }
   }
 }
 

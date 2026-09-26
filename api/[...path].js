@@ -1265,12 +1265,12 @@ var init_instagramService = __esm({
       }
       /**
        * Generates a cryptographically secure, stateless CSRF state token that works reliably
-       * across Vercel and Cloud Run invocations without requiring shared server memory.
+       * across Vercel serverless invocations without requiring shared server memory.
        * State contains:
        * - timestamp
        * - authenticated internal user identifier
        * - cryptographically random nonce
-       * - HMAC signature generated only by Cloud Run
+       * - HMAC signature generated using server STATE_SECRET
        */
       static createOAuthState(userId) {
         const now = Date.now();
@@ -1292,7 +1292,7 @@ var init_instagramService = __esm({
        * 1. State presence & format check
        * 2. Replay check (single-use: state has not already been consumed)
        * 3. Maximum age check of 5 minutes (300,000 ms)
-       * 4. Constant-time cryptographic HMAC-SHA256 signature verification against Cloud Run's STATE_SECRET
+       * 4. Constant-time cryptographic HMAC-SHA256 signature verification against STATE_SECRET
        * 5. Atomically consumes the state prior to token exchange
        */
       static validateAndConsumeInternalExchangeState(state, maxAgeMs = 5 * 60 * 1e3) {
@@ -2331,6 +2331,9 @@ ${linkButtonText ? `\u{1F517} ${linkButtonText}: ` : ""}${linkUrl}` : message;
         this.pollerInterval = setInterval(() => {
           this.syncAllActiveAccounts();
         }, 12e3);
+        if (this.pollerInterval && typeof this.pollerInterval.unref === "function") {
+          this.pollerInterval.unref();
+        }
       }
     };
     InstagramService.startCommentPoller();
@@ -3153,6 +3156,18 @@ router2.post("/sync-comments", async (req, res) => {
 function escapeHtml(str) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
+function parseCookies(cookieHeader) {
+  const list = {};
+  if (!cookieHeader) return list;
+  cookieHeader.split(";").forEach((cookie) => {
+    const parts = cookie.split("=");
+    const name = parts.shift()?.trim();
+    if (name) {
+      list[name] = decodeURIComponent(parts.join("=")?.trim() || "");
+    }
+  });
+  return list;
+}
 function renderErrorHtml(title, subtitle, rows, redirectUri, timestamp) {
   const rowHtml = rows.map(
     (r) => `
@@ -3314,7 +3329,7 @@ router2.post("/internal/exchange-code", async (req, res) => {
       });
       return;
     }
-    LoggingService.info("OAuth state verified by Cloud Run. Initiating token exchange with Meta...");
+    LoggingService.info("OAuth state verified. Initiating token exchange with Meta...");
     const tokenResult = await InstagramService.exchangeCodeForToken(code);
     if (tokenResult.error || !tokenResult.accessToken) {
       LoggingService.error("Token exchange with Meta failed", tokenResult.error);
@@ -3416,33 +3431,75 @@ router2.get("/callback", async (req, res) => {
     ], productionCallbackUrl, currentUtcTimestamp));
     return;
   }
+  const cookieHeader = req.headers.cookie;
+  const cookieState = cookieHeader ? parseCookies(cookieHeader)["ig_oauth_state"] : void 0;
+  const stateResult = InstagramService.validateAndConsumeOAuthState(state.trim(), cookieState);
+  if (!stateResult.isValid) {
+    LoggingService.warn("OAuth callback rejected: state validation failed");
+    res.status(400).send(renderErrorHtml("Security Verification Failed", "The OAuth state parameter is invalid, expired, or has already been used.", [
+      { label: "State Verification", value: "Failed (invalid, expired, or reused)" }
+    ], productionCallbackUrl, currentUtcTimestamp));
+    return;
+  }
   try {
-    const isLocal = req.headers.host && (req.headers.host.includes("localhost") || req.headers.host.includes("127.0.0.1"));
-    const privateBackendBase = isLocal ? `http://${req.headers.host}` : process.env.PRIVATE_BACKEND_URL || "https://ais-pre-6t2aafwrddbxusaemb5oqh-714931722661.asia-southeast1.run.app";
-    const exchangeEndpoint = `${privateBackendBase.replace(/\/$/, "")}/api/instagram/internal/exchange-code`;
-    LoggingService.info("Forwarding authorization code and signed state to private Cloud Run backend...");
-    const exchangeRes = await fetch(exchangeEndpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        code: code.trim(),
-        state: state.trim(),
-        redirectUri: productionCallbackUrl
-      })
-    });
-    const exchangeData = await exchangeRes.json().catch(() => null);
-    if (!exchangeRes.ok || !exchangeData || !exchangeData.success || !exchangeData.account) {
-      const errorMsg = exchangeData?.error || `Private backend rejected token exchange (HTTP ${exchangeRes.status})`;
-      LoggingService.error("Private backend token exchange failed", errorMsg);
-      res.status(400).send(renderErrorHtml("Token Exchange Failed", "The private backend could not complete the Instagram token exchange.", [
-        { label: "Verification Result", value: errorMsg }
+    LoggingService.info("OAuth state verified on Vercel. Initiating token exchange with Meta...");
+    const tokenResult = await InstagramService.exchangeCodeForToken(code.trim());
+    if (tokenResult.error || !tokenResult.accessToken) {
+      LoggingService.error("Token exchange with Meta failed", tokenResult.error);
+      res.status(400).send(renderErrorHtml("Token Exchange Failed", "Meta could not complete the Instagram token exchange.", [
+        { label: "Verification Result", value: tokenResult.error || "Token exchange failed" }
       ], productionCallbackUrl, currentUtcTimestamp));
       return;
     }
+    const accessToken = tokenResult.accessToken;
+    let igUsername = "connected_user";
+    let igName = "Instagram Account";
+    let igUserId = `ig_${Date.now()}`;
+    let igAccountType = void 0;
+    try {
+      const igCandidateUrls = [
+        `https://graph.instagram.com/v21.0/me?fields=id,username,account_type&access_token=${encodeURIComponent(accessToken)}`,
+        `https://graph.instagram.com/me?fields=id,username,account_type&access_token=${encodeURIComponent(accessToken)}`
+      ];
+      for (const igUrl of igCandidateUrls) {
+        const meRes = await fetch(igUrl);
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData?.id) igUserId = meData.id;
+          if (meData?.username) {
+            igUsername = meData.username;
+            igName = `@${meData.username}`;
+          }
+          if (meData?.account_type) {
+            igAccountType = meData.account_type;
+          }
+          break;
+        }
+      }
+    } catch (e) {
+      LoggingService.warn("Could not query Instagram /me endpoint for profile metadata", e?.message);
+    }
+    const userId = stateResult.userId || "usr_default_01";
+    const savedAccount = await databaseService.upsertInstagramAccount(userId, {
+      username: igUsername,
+      name: igName,
+      instagramUserId: igUserId,
+      accessToken
+    });
+    LoggingService.info(`Successfully connected and saved Instagram account @${savedAccount.username}`);
     res.clearCookie("ig_oauth_state", { path: "/" });
-    const sanitizedAccount = exchangeData.account;
+    const sanitizedAccount = {
+      id: savedAccount.id,
+      userId: savedAccount.userId,
+      instagramUserId: savedAccount.instagramUserId,
+      username: savedAccount.username,
+      name: savedAccount.name,
+      profilePictureUrl: savedAccount.profilePictureUrl,
+      accountType: igAccountType,
+      isConnected: savedAccount.isConnected,
+      connectedAt: savedAccount.connectedAt,
+      updatedAt: savedAccount.updatedAt
+    };
     const successHtml = `
       <!DOCTYPE html>
       <html lang="en">
@@ -3550,10 +3607,10 @@ router2.get("/callback", async (req, res) => {
       </html>
     `;
     res.send(successHtml);
-  } catch (netErr) {
-    LoggingService.error("Network failure connecting to Cloud Run backend", netErr?.message);
-    res.status(502).send(renderErrorHtml("Backend Connection Error", "Failed to reach the private Cloud Run backend to perform the token exchange.", [
-      { label: "Error", value: "Network error communicating with private backend" }
+  } catch (err) {
+    LoggingService.error("OAuth token exchange error on Vercel", err?.message);
+    res.status(500).send(renderErrorHtml("Internal Server Error", "An unexpected error occurred while connecting your Instagram account.", [
+      { label: "Error", value: err?.message || "Server error" }
     ], productionCallbackUrl, currentUtcTimestamp));
   }
 });

@@ -28,11 +28,11 @@ async function startServer() {
         res.sendFile(path.resolve(distPath, 'index.html'));
       });
     } else {
-      // Standalone backend container mode (decoupled from frontend static build)
+      // Standalone backend mode (decoupled from frontend static build)
       app.get('/', (_req: Request, res: Response) => {
         res.status(200).json({
           status: 'ok',
-          service: 'InstaFlow Cloud Run API Engine',
+          service: 'InstaFlow API Engine',
           timestamp: new Date().toISOString(),
         });
       });

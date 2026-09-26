@@ -335,13 +335,13 @@ router.get('/connect-ig', async (req, res): Promise<void> => {
 
 /**
  * POST /api/instagram/internal/exchange-code
- * Private Cloud Run endpoint: executes real token exchange after cryptographically
- * verifying the signed OAuth state using Cloud Run's STATE_SECRET.
+ * Internal exchange endpoint: executes real token exchange after cryptographically
+ * verifying the signed OAuth state using STATE_SECRET.
  *
  * Security Requirements:
  * - Rejects missing code or state
  * - Rejects redirectUri that does NOT equal https://instaflowv2.vercel.app/api/instagram/callback
- * - Validates state cryptographic HMAC signature using Cloud Run's STATE_SECRET
+ * - Validates state cryptographic HMAC signature using STATE_SECRET
  * - Rejects expired state (> 5 minutes)
  * - Atomically consumes state to prevent replay
  * - Derives user identity from state payload, never from unauthenticated request
@@ -372,7 +372,7 @@ router.post('/internal/exchange-code', async (req, res): Promise<void> => {
       return;
     }
 
-    // 3. Validate and atomically consume state using Cloud Run's STATE_SECRET (max 5 minutes age)
+    // 3. Validate and atomically consume state using STATE_SECRET (max 5 minutes age)
     const stateResult = InstagramService.validateAndConsumeInternalExchangeState(state, 5 * 60 * 1000);
     if (!stateResult.isValid) {
       LoggingService.warn('Internal exchange rejected: state validation failed', stateResult.error);
@@ -384,7 +384,7 @@ router.post('/internal/exchange-code', async (req, res): Promise<void> => {
     }
 
     // 4. State is valid and now consumed. Perform real token exchange via Meta
-    LoggingService.info('OAuth state verified by Cloud Run. Initiating token exchange with Meta...');
+    LoggingService.info('OAuth state verified. Initiating token exchange with Meta...');
     const tokenResult = await InstagramService.exchangeCodeForToken(code);
 
     if (tokenResult.error || !tokenResult.accessToken) {
@@ -468,9 +468,8 @@ router.post('/internal/exchange-code', async (req, res): Promise<void> => {
 
 /**
  * GET /api/instagram/callback
- * Handles OAuth redirect from Meta / Instagram Login.
- * On Vercel: Receives code and state, validates presence, and securely forwards
- * to the private Cloud Run backend over HTTPS for cryptographic verification & token exchange.
+ * Handles OAuth redirect from Meta / Instagram Login on Vercel.
+ * Performs direct serverless token exchange, profile retrieval, and database upsert.
  */
 router.get('/callback', async (req, res): Promise<void> => {
   const { code, state, error, error_reason, error_description } = req.query;
@@ -512,43 +511,89 @@ router.get('/callback', async (req, res): Promise<void> => {
     return;
   }
 
-  // 4. Securely forward authorization code and signed state to the private Cloud Run backend
+  // 4. Validate OAuth state (checks HttpOnly cookie or cryptographic HMAC signature with STATE_SECRET)
+  const cookieHeader = req.headers.cookie;
+  const cookieState = cookieHeader ? parseCookies(cookieHeader)['ig_oauth_state'] : undefined;
+  const stateResult = InstagramService.validateAndConsumeOAuthState(state.trim(), cookieState);
+
+  if (!stateResult.isValid) {
+    LoggingService.warn('OAuth callback rejected: state validation failed');
+    res.status(400).send(renderErrorHtml('Security Verification Failed', 'The OAuth state parameter is invalid, expired, or has already been used.', [
+      { label: 'State Verification', value: 'Failed (invalid, expired, or reused)' },
+    ], productionCallbackUrl, currentUtcTimestamp));
+    return;
+  }
+
+  // 5. State verified! Perform real server-side token exchange directly on Vercel
   try {
-    const isLocal = req.headers.host && (req.headers.host.includes('localhost') || req.headers.host.includes('127.0.0.1'));
-    const privateBackendBase = isLocal
-      ? `http://${req.headers.host}`
-      : (process.env.PRIVATE_BACKEND_URL || 'https://ais-pre-6t2aafwrddbxusaemb5oqh-714931722661.asia-southeast1.run.app');
+    LoggingService.info('OAuth state verified on Vercel. Initiating token exchange with Meta...');
+    const tokenResult = await InstagramService.exchangeCodeForToken(code.trim());
 
-    const exchangeEndpoint = `${privateBackendBase.replace(/\/$/, '')}/api/instagram/internal/exchange-code`;
-
-    LoggingService.info('Forwarding authorization code and signed state to private Cloud Run backend...');
-
-    const exchangeRes = await fetch(exchangeEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        code: code.trim(),
-        state: state.trim(),
-        redirectUri: productionCallbackUrl,
-      }),
-    });
-
-    const exchangeData = await exchangeRes.json().catch(() => null);
-
-    if (!exchangeRes.ok || !exchangeData || !exchangeData.success || !exchangeData.account) {
-      const errorMsg = exchangeData?.error || `Private backend rejected token exchange (HTTP ${exchangeRes.status})`;
-      LoggingService.error('Private backend token exchange failed', errorMsg);
-      res.status(400).send(renderErrorHtml('Token Exchange Failed', 'The private backend could not complete the Instagram token exchange.', [
-        { label: 'Verification Result', value: errorMsg },
+    if (tokenResult.error || !tokenResult.accessToken) {
+      LoggingService.error('Token exchange with Meta failed', tokenResult.error);
+      res.status(400).send(renderErrorHtml('Token Exchange Failed', 'Meta could not complete the Instagram token exchange.', [
+        { label: 'Verification Result', value: tokenResult.error || 'Token exchange failed' },
       ], productionCallbackUrl, currentUtcTimestamp));
       return;
     }
 
-    // 5. Success! Clear the state cookie and send sanitized account data to frontend popup
+    const accessToken = tokenResult.accessToken;
+    let igUsername = 'connected_user';
+    let igName = 'Instagram Account';
+    let igUserId = `ig_${Date.now()}`;
+    let igAccountType: string | undefined = undefined;
+
+    // 6. Query official Instagram API (graph.instagram.com) for profile metadata
+    try {
+      const igCandidateUrls = [
+        `https://graph.instagram.com/v21.0/me?fields=id,username,account_type&access_token=${encodeURIComponent(accessToken)}`,
+        `https://graph.instagram.com/me?fields=id,username,account_type&access_token=${encodeURIComponent(accessToken)}`,
+      ];
+
+      for (const igUrl of igCandidateUrls) {
+        const meRes = await fetch(igUrl);
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData?.id) igUserId = meData.id;
+          if (meData?.username) {
+            igUsername = meData.username;
+            igName = `@${meData.username}`;
+          }
+          if (meData?.account_type) {
+            igAccountType = meData.account_type;
+          }
+          break;
+        }
+      }
+    } catch (e: any) {
+      LoggingService.warn('Could not query Instagram /me endpoint for profile metadata', e?.message);
+    }
+
+    // 7. Securely persist account to database using user identity derived from state
+    const userId = stateResult.userId || 'usr_default_01';
+    const savedAccount = await databaseService.upsertInstagramAccount(userId, {
+      username: igUsername,
+      name: igName,
+      instagramUserId: igUserId,
+      accessToken,
+    });
+
+    LoggingService.info(`Successfully connected and saved Instagram account @${savedAccount.username}`);
+
+    // 8. Success! Clear the state cookie and send sanitized account data to frontend popup
     res.clearCookie('ig_oauth_state', { path: '/' });
-    const sanitizedAccount = exchangeData.account;
+    const sanitizedAccount = {
+      id: savedAccount.id,
+      userId: savedAccount.userId,
+      instagramUserId: savedAccount.instagramUserId,
+      username: savedAccount.username,
+      name: savedAccount.name,
+      profilePictureUrl: savedAccount.profilePictureUrl,
+      accountType: igAccountType,
+      isConnected: savedAccount.isConnected,
+      connectedAt: savedAccount.connectedAt,
+      updatedAt: savedAccount.updatedAt,
+    };
 
     const successHtml = `
       <!DOCTYPE html>
@@ -658,10 +703,10 @@ router.get('/callback', async (req, res): Promise<void> => {
     `;
 
     res.send(successHtml);
-  } catch (netErr: any) {
-    LoggingService.error('Network failure connecting to Cloud Run backend', netErr?.message);
-    res.status(502).send(renderErrorHtml('Backend Connection Error', 'Failed to reach the private Cloud Run backend to perform the token exchange.', [
-      { label: 'Error', value: 'Network error communicating with private backend' },
+  } catch (err: any) {
+    LoggingService.error('OAuth token exchange error on Vercel', err?.message);
+    res.status(500).send(renderErrorHtml('Internal Server Error', 'An unexpected error occurred while connecting your Instagram account.', [
+      { label: 'Error', value: err?.message || 'Server error' },
     ], productionCallbackUrl, currentUtcTimestamp));
   }
 });
