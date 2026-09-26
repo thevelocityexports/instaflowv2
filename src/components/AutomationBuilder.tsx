@@ -69,145 +69,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     initialData?.name || 'Auto-DM links from comments'
   );
 
-  // Helper for generating initial account reels
-  const getDefaultReels = (handle: string): InstagramMediaItem[] => {
-    const clean = (handle || 'thevelocityexports').replace(/^@/, '').trim().toLowerCase();
-    const isVajra =
-      clean.includes('vajra') ||
-      clean.includes('makuta') ||
-      clean.includes('jewel') ||
-      clean.includes('panchaloha');
-
-    if (isVajra) {
-      return [
-        {
-          id: `reel_vajra_01`,
-          caption: `vajramakutajewellers ✨ FESTIVALS ARE COMING — CELEBRATE WITH TIMELESS TRADITION! ✨ This festive season, adorn your celebrations with the elegance of a beautiful black beats from Vajramukuta Pancha Loha Jewellers. 💛✨ A symbol of tradition, love and timeless beauty — our black beats collection brings together classic designs and beautiful craftsmanship for your special occasions. 🙏✨ Festive Season • Timeless Tradition • Beautiful Jewellery ✨ Dilsukhnagar Branch Metro Pillar No. A1511 & A1519. Beside Karnataka Bank`,
-          mediaType: 'VIDEO',
-          mediaProductType: 'REELS',
-          isReel: true,
-          thumbnailUrl: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=600&q=80',
-          mediaUrl: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=600&q=80',
-          permalink: `https://www.instagram.com/vajramakutajewellers/reel/black_beads_01/`,
-          timestamp: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
-          likeCount: 51,
-          commentsCount: 1,
-          tag: 'VAJRAMAKUTA JEWELLERS',
-          overlayText: 'VAJRAMAKUTA JEWELLERS',
-        } as any,
-        {
-          id: `reel_vajra_02`,
-          caption: `vajramakutajewellers 🌟 Discover the golden glow of Panchaloha handcrafted ear ornaments. Pure craftsmanship for weddings & festive occasions! Comment PRICE for catalog.`,
-          mediaType: 'VIDEO',
-          mediaProductType: 'REELS',
-          isReel: true,
-          thumbnailUrl: 'https://images.unsplash.com/photo-1630019852942-f89202989a59?auto=format&fit=crop&w=600&q=80',
-          mediaUrl: 'https://images.unsplash.com/photo-1630019852942-f89202989a59?auto=format&fit=crop&w=600&q=80',
-          permalink: `https://www.instagram.com/vajramakutajewellers/reel/gold_earrings_02/`,
-          timestamp: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
-          likeCount: 89,
-          commentsCount: 12,
-          tag: 'VAJRAMAKUTA JEWELLERS',
-          overlayText: 'VAJRAMAKUTA JEWELLERS',
-        } as any,
-        {
-          id: `reel_vajra_03`,
-          caption: `vajramakutajewellers 💎 Explore our signature temple jewellery sets crafted in 5-metal Panchaloha alloy. Visit our Dilsukhnagar flagship store or DM for video shopping!`,
-          mediaType: 'VIDEO',
-          mediaProductType: 'REELS',
-          isReel: true,
-          thumbnailUrl: 'https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?auto=format&fit=crop&w=600&q=80',
-          mediaUrl: 'https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?auto=format&fit=crop&w=600&q=80',
-          permalink: `https://www.instagram.com/vajramakutajewellers/reel/temple_collection_03/`,
-          timestamp: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
-          likeCount: 124,
-          commentsCount: 19,
-          tag: 'VAJRAMAKUTA JEWELLERS',
-          overlayText: 'VAJRAMAKUTA JEWELLERS',
-        } as any,
-        {
-          id: `reel_vajra_04`,
-          caption: `vajramakutajewellers ✨ Traditional Plain Panchaloha Bangles with lifetime shine guarantee. Comment BANGLES or SIZE to order yours today!`,
-          mediaType: 'VIDEO',
-          mediaProductType: 'REELS',
-          isReel: true,
-          thumbnailUrl: 'https://images.unsplash.com/photo-1602751584552-8ba73aad10e1?auto=format&fit=crop&w=600&q=80',
-          mediaUrl: 'https://images.unsplash.com/photo-1602751584552-8ba73aad10e1?auto=format&fit=crop&w=600&q=80',
-          permalink: `https://www.instagram.com/vajramakutajewellers/reel/plain_bangles_04/`,
-          timestamp: new Date(Date.now() - 72 * 3600 * 1000).toISOString(),
-          likeCount: 210,
-          commentsCount: 34,
-          tag: 'PLAIN BANGLES',
-          overlayText: 'PLAIN BANGLES',
-        } as any,
-      ];
-    }
-
-    return [
-      {
-        id: `reel_${clean}_01`,
-        caption: `@${clean} 📦 New Export Consignment dispatched to North America & Europe! Premium Grade Quality Guaranteed. ✈️ Comment CATALOG or PRICE to get our full product catalog and FOB price sheet!`,
-        mediaType: 'VIDEO',
-        mediaProductType: 'REELS',
-        isReel: true,
-        thumbnailUrl: 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=600&q=80',
-        mediaUrl: 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=600&q=80',
-        permalink: `https://www.instagram.com/${clean}/reel/export_consignment_01/`,
-        timestamp: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
-        likeCount: 142,
-        commentsCount: 18,
-        tag: 'EXPORT CARGO',
-        overlayText: 'GLOBAL SHIPMENT',
-      } as any,
-      {
-        id: `reel_${clean}_02`,
-        caption: `@${clean} 🚢 Port Loading & Container Clearance Completed. Fast worldwide shipping with full tracking. Comment SHIP to get container status & shipping schedules!`,
-        mediaType: 'VIDEO',
-        mediaProductType: 'REELS',
-        isReel: true,
-        thumbnailUrl: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80',
-        mediaUrl: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80',
-        permalink: `https://www.instagram.com/${clean}/reel/container_loading_02/`,
-        timestamp: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
-        likeCount: 215,
-        commentsCount: 24,
-        tag: 'CONTAINER LOGISTICS',
-        overlayText: 'PORT DISPATCH',
-      } as any,
-      {
-        id: `reel_${clean}_03`,
-        caption: `@${clean} ⚙️ Factory Floor Quality Check & Packaging Line. Certified standards for global export markets. Comment DETAILS for minimum order quantities and bulk pricing!`,
-        mediaType: 'VIDEO',
-        mediaProductType: 'REELS',
-        isReel: true,
-        thumbnailUrl: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=80',
-        mediaUrl: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=80',
-        permalink: `https://www.instagram.com/${clean}/reel/factory_check_03/`,
-        timestamp: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
-        likeCount: 389,
-        commentsCount: 31,
-        tag: 'QUALITY CHECK',
-        overlayText: 'FACTORY INSPECTION',
-      } as any,
-      {
-        id: `reel_${clean}_04`,
-        caption: `@${clean} 🌐 Velocity Exports Global Trade Network. Partnering with distributors across 35+ countries. Comment CONNECT to speak with our international trade manager!`,
-        mediaType: 'VIDEO',
-        mediaProductType: 'REELS',
-        isReel: true,
-        thumbnailUrl: 'https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=600&q=80',
-        mediaUrl: 'https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=600&q=80',
-        permalink: `https://www.instagram.com/${clean}/reel/global_trade_04/`,
-        timestamp: new Date(Date.now() - 72 * 3600 * 1000).toISOString(),
-        likeCount: 460,
-        commentsCount: 42,
-        tag: 'GLOBAL TRADE',
-        overlayText: 'WORLDWIDE EXPORTS',
-      } as any,
-    ];
-  };
-
-  // Live Media State (starts from cached synced reels so it never flickers or resets)
+  // Live Media State (starts from cached synced reels, defaults to empty array)
   const [liveMedia, setLiveMedia] = useState<InstagramMediaItem[]>(() => {
     try {
       const active = localStorage.getItem('instaflow_active_reels') || localStorage.getItem(`instaflow_media_${activeUsername}`);
@@ -216,7 +78,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch (e) {}
-    return getDefaultReels(activeUsername);
+    return [];
   });
   const [isLoadingMedia, setIsLoadingMedia] = useState(false);
   const [showAllModal, setShowAllModal] = useState(false);
@@ -284,27 +146,20 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     try {
       const cacheKey = `instaflow_media_${activeUsername}`;
       const res = await ApiClient.getInstagramMedia(connectedAccount?.id);
-      if (res && res.success && res.media && res.media.length > 0) {
+      if (res && res.success && Array.isArray(res.media)) {
         setLiveMedia(res.media);
         localStorage.setItem(cacheKey, JSON.stringify(res.media));
         localStorage.setItem('instaflow_active_reels', JSON.stringify(res.media));
-        if (!selectedPostId || !res.media.some((m) => m.id === selectedPostId)) {
-          setSelectedPostId(res.media[0].id);
+        if (res.media.length > 0) {
+          if (!selectedPostId || !res.media.some((m) => m.id === selectedPostId)) {
+            setSelectedPostId(res.media[0].id);
+          }
         }
       } else {
-        const defaults = getDefaultReels(activeUsername);
-        setLiveMedia(defaults);
-        localStorage.setItem(cacheKey, JSON.stringify(defaults));
-        if (!selectedPostId) {
-          setSelectedPostId(defaults[0].id);
-        }
+        setLiveMedia([]);
       }
     } catch (err: any) {
-      const defaults = getDefaultReels(activeUsername);
-      setLiveMedia(defaults);
-      if (!selectedPostId) {
-        setSelectedPostId(defaults[0].id);
-      }
+      console.warn('Could not fetch live media from Instagram API:', err);
     } finally {
       setIsLoadingMedia(false);
     }
@@ -333,13 +188,13 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     selectedItem?.thumbnailUrl ||
     selectedItem?.mediaUrl ||
     initialData?.targetPostThumbnail ||
-    'https://images.unsplash.com/photo-1611591475879-114c004d80a1?auto=format&fit=crop&w=600&q=80';
+    '';
 
   const displayCaption =
     (selectedPostId && initialData?.targetPostId && selectedPostId === initialData.targetPostId && initialData.targetPostCaption) ||
     selectedItem?.caption ||
     initialData?.targetPostCaption ||
-    `@${activeUsername} 📦 New Export Consignment dispatched to North America & Europe! Premium Grade Quality Guaranteed. ✈️ Comment CATALOG or PRICE to get our full product catalog and FOB price sheet!`;
+    `@${activeUsername} • Select a post or reel to create your automation`;
 
   const handleSelectReel = (item: InstagramMediaItem) => {
     setTargetPostType('specific');
@@ -516,72 +371,87 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                 </button>
               </div>
 
-              {/* 4 REEL CARDS SIDE BY SIDE (Matching Manychat Screenshot 2) */}
+              {/* REEL CARDS / EMPTY STATE / SKELETON */}
               <div className="pt-1">
-                <div className="grid grid-cols-4 gap-2">
-                  {liveMedia.slice(0, 4).map((item, idx) => {
-                    const isSelected = selectedPostId === item.id;
-                    const fallbackTitles = [
-                      'GLOBAL SHIPMENT',
-                      'PORT DISPATCH',
-                      'FACTORY CHECK',
-                      'WORLDWIDE TRADE',
-                    ];
-                    const overlay = (item as any).overlayText || fallbackTitles[idx] || 'REEL';
-
-                    return (
-                      <div
-                        key={item.id}
-                        onClick={() => handleSelectReel(item)}
-                        className={`relative aspect-[3/4] rounded-lg overflow-hidden border-2 cursor-pointer transition-all ${
-                          isSelected && targetPostType === 'specific'
-                            ? 'border-[#0066ff] ring-2 ring-[#0066ff]/20 scale-[0.98]'
-                            : 'border-slate-200 hover:border-slate-400'
-                        }`}
-                      >
-                        <img
-                          src={item.thumbnailUrl || item.mediaUrl}
-                          alt={item.caption || 'Instagram Reel'}
-                          onError={(e) => {
-                            const fallbacks = [
-                              'https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=600&q=80',
-                              'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80',
-                              'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=80',
-                              'https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=600&q=80',
-                            ];
-                            e.currentTarget.src = fallbacks[idx % fallbacks.length];
-                          }}
-                          className="w-full h-full object-cover"
-                        />
-                        {/* Reel Indicator & Overlay Tag */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-1">
-                          <span className="text-[8px] font-black text-amber-300 uppercase leading-none drop-shadow-md truncate">
-                            {overlay}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Show All & Quick Import Reel */}
-                <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowAllModal(true)}
-                    className="text-xs font-semibold text-[#0066ff] hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>Show All</span>
-                    <span className="text-[10px] text-slate-400 font-normal">
-                      ({liveMedia.length} reels from @{activeUsername})
-                    </span>
-                  </button>
-
-                  <div className="flex items-center gap-1 text-[11px] text-slate-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span>Live Reel Sync Active</span>
+                {isLoadingMedia ? (
+                  <div className="grid grid-cols-4 gap-2">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div key={i} className="aspect-[3/4] rounded-lg bg-slate-100 animate-pulse border border-slate-200" />
+                    ))}
                   </div>
-                </div>
+                ) : liveMedia.length === 0 ? (
+                  <div className="py-6 px-4 text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200 space-y-2">
+                    <Film className="w-6 h-6 text-slate-400 mx-auto" />
+                    <p className="text-xs font-semibold text-slate-700">No posts or reels found</p>
+                    <p className="text-[11px] text-slate-500 max-w-xs mx-auto">
+                      No media found for @{activeUsername}. Publish a post or reel on Instagram, then click sync.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={fetchLiveMedia}
+                      disabled={isLoadingMedia}
+                      className="mt-1 px-3 py-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-2xs inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isLoadingMedia ? 'animate-spin' : ''}`} />
+                      <span>Sync Media</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-4 gap-2">
+                    {liveMedia.slice(0, 4).map((item) => {
+                      const isSelected = selectedPostId === item.id;
+                      const isReel = Boolean(item.isReel || item.mediaProductType === 'REELS');
+
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => handleSelectReel(item)}
+                          className={`relative aspect-[3/4] rounded-lg overflow-hidden border-2 cursor-pointer transition-all bg-slate-100 ${
+                            isSelected && targetPostType === 'specific'
+                              ? 'border-[#0066ff] ring-2 ring-[#0066ff]/20 scale-[0.98]'
+                              : 'border-slate-200 hover:border-slate-400'
+                          }`}
+                        >
+                          <img
+                            src={item.thumbnailUrl || item.mediaUrl}
+                            alt={item.caption || 'Instagram Reel'}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                          {/* Reel Indicator Tag */}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-1">
+                            <span className="text-[8px] font-bold text-white uppercase leading-none drop-shadow-md truncate">
+                              {isReel ? '🎬 REEL' : 'POST'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Show All & Sync Status */}
+                {liveMedia.length > 0 && (
+                  <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAllModal(true)}
+                      className="text-xs font-semibold text-[#0066ff] hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>Show All</span>
+                      <span className="text-[10px] text-slate-400 font-normal">
+                        ({liveMedia.length} posts/reels from @{activeUsername})
+                      </span>
+                    </button>
+
+                    <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      <span>Live Media Sync Active</span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Optional Import by Reel Link */}
                 <div className="mt-2 pt-2 border-t border-slate-100/80">
@@ -940,20 +810,19 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   {/* Account Header */}
                   <div className="p-2.5 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full overflow-hidden border border-slate-200 bg-[#0a180f] flex items-center justify-center text-[8px] font-bold text-[#c5a059] leading-none shrink-0 shadow-2xs">
-                        <img
-                          src={
-                            connectedAccount?.profilePictureUrl ||
-                            `https://unavatar.io/instagram/${activeUsername}`
-                          }
-                          alt={activeUsername}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.currentTarget.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
-                              activeName || activeUsername
-                            )}`;
-                          }}
-                        />
+                      <div className="w-7 h-7 rounded-full overflow-hidden border border-slate-200 bg-gradient-to-tr from-purple-600 via-pink-500 to-rose-500 flex items-center justify-center text-[9px] font-bold text-white leading-none shrink-0 shadow-2xs">
+                        {connectedAccount?.profilePictureUrl ? (
+                          <img
+                            src={connectedAccount.profilePictureUrl}
+                            alt={activeUsername}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <span>{(activeName || activeUsername).slice(0, 2).toUpperCase()}</span>
+                        )}
                       </div>
                       <span className="font-bold text-[11px] text-slate-900 truncate max-w-[170px]">
                         {activeUsername}
@@ -963,16 +832,23 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   </div>
 
                   {/* Reel Photo / Video with Overlay (Screenshot 2) */}
-                  <div className="w-full aspect-[4/4] bg-slate-900 relative overflow-hidden shrink-0">
-                    <img
-                      src={displayThumbnail}
-                      alt="Reel Media"
-                      onError={(e) => {
-                        e.currentTarget.src = 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=600&q=80';
-                      }}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex flex-col justify-end p-2.5">
+                  <div className="w-full aspect-[4/4] bg-slate-900 relative overflow-hidden shrink-0 flex items-center justify-center">
+                    {displayThumbnail ? (
+                      <img
+                        src={displayThumbnail}
+                        alt="Reel Media"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="text-center p-4 text-slate-400 space-y-1">
+                        <Film className="w-8 h-8 mx-auto opacity-50 text-slate-500" />
+                        <span className="text-[10px] block font-medium">Select a post or reel</span>
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex flex-col justify-end p-2.5 pointer-events-none">
                       <span className="text-[10px] font-black text-amber-300 uppercase leading-none drop-shadow-md">
                         {activeName}
                       </span>

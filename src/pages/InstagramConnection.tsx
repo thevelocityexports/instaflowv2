@@ -290,10 +290,21 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-gradient-to-r from-slate-50 via-blue-50/20 to-slate-50 rounded-2xl border border-slate-200">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 p-0.5 shadow-xs shrink-0">
-                  <div className="w-full h-full bg-white rounded-full flex items-center justify-center text-sm font-bold text-slate-900 uppercase">
-                    {getInitials(connectedAccount.name, connectedAccount.username)}
-                  </div>
+                <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 p-0.5 shadow-xs shrink-0 overflow-hidden">
+                  {connectedAccount.profilePictureUrl ? (
+                    <img
+                      src={connectedAccount.profilePictureUrl}
+                      alt={connectedAccount.username}
+                      className="w-full h-full rounded-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-white rounded-full flex items-center justify-center text-sm font-bold text-slate-900 uppercase">
+                      {getInitials(connectedAccount.name, connectedAccount.username)}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-0.5">

@@ -107,26 +107,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <div className="flex items-center gap-2.5 min-w-0">
                 {/* Account Profile Picture */}
-                <div className="relative shrink-0 w-8 h-8 rounded-full overflow-hidden border border-slate-200/80 shadow-2xs bg-[#0a180f] flex items-center justify-center">
-                  <img
-                    src={
-                      connectedAccount.profilePictureUrl ||
-                      (connectedAccount.username.toLowerCase().includes('vajra') || connectedAccount.username.toLowerCase().includes('jewel')
-                        ? 'https://images.unsplash.com/photo-1611591475879-114c004d80a1?auto=format&fit=crop&w=200&q=80'
-                        : `https://unavatar.io/instagram/${connectedAccount.username}`)
-                    }
-                    alt={connectedAccount.username}
-                    referrerPolicy="no-referrer"
-                    crossOrigin="anonymous"
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      if (!e.currentTarget.src.includes('dicebear')) {
-                        e.currentTarget.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
-                          connectedAccount.name || connectedAccount.username || 'VM'
-                        )}&backgroundColor=0a180f&textColor=c5a059`;
-                      }
-                    }}
-                  />
+                <div className="relative shrink-0 w-8 h-8 rounded-full overflow-hidden border border-slate-200/80 shadow-2xs bg-gradient-to-tr from-purple-600 via-pink-500 to-rose-500 flex items-center justify-center text-white">
+                  {connectedAccount.profilePictureUrl ? (
+                    <img
+                      src={connectedAccount.profilePictureUrl}
+                      alt={connectedAccount.username}
+                      referrerPolicy="no-referrer"
+                      crossOrigin="anonymous"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <span className="text-xs font-bold uppercase">
+                      {(connectedAccount.name || connectedAccount.username || 'IG').slice(0, 2)}
+                    </span>
+                  )}
                 </div>
 
                 <div className="min-w-0 flex-1">

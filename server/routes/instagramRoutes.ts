@@ -413,10 +413,6 @@ router.post('/internal/exchange-code', async (req, res): Promise<void> => {
       LoggingService.warn('Could not query Instagram /me endpoint for profile metadata', e?.message);
     }
 
-    if (!igProfilePictureUrl && igUsername && igUsername !== 'connected_user') {
-      igProfilePictureUrl = `https://unavatar.io/instagram/${igUsername}`;
-    }
-
     // 6. Automatically synchronize live Instagram media (posts and reels)
     let syncedMedia: any[] = [];
     try {
@@ -427,12 +423,9 @@ router.post('/internal/exchange-code', async (req, res): Promise<void> => {
       });
       if (mediaResult.success && mediaResult.media && mediaResult.media.length > 0) {
         syncedMedia = mediaResult.media;
-      } else {
-        syncedMedia = InstagramService.getDefaultMediaForAccount(igUsername);
       }
     } catch (mErr: any) {
       LoggingService.warn('Media fetch notice during OAuth exchange', mErr?.message);
-      syncedMedia = InstagramService.getDefaultMediaForAccount(igUsername);
     }
 
     // 7. Securely persist account to database using user identity derived from state
@@ -597,10 +590,6 @@ router.get('/callback', async (req, res): Promise<void> => {
       LoggingService.warn('Could not query Instagram /me endpoint for profile metadata', e?.message);
     }
 
-    if (!igProfilePictureUrl && igUsername && igUsername !== 'connected_user') {
-      igProfilePictureUrl = `https://unavatar.io/instagram/${igUsername}`;
-    }
-
     // 7. Automatically synchronize live Instagram media (posts, reels, etc.)
     let syncedMedia: any[] = [];
     try {
@@ -611,12 +600,9 @@ router.get('/callback', async (req, res): Promise<void> => {
       });
       if (mediaResult.success && mediaResult.media && mediaResult.media.length > 0) {
         syncedMedia = mediaResult.media;
-      } else {
-        syncedMedia = InstagramService.getDefaultMediaForAccount(igUsername);
       }
     } catch (mErr: any) {
       LoggingService.warn('Media fetch notice during OAuth callback', mErr?.message);
-      syncedMedia = InstagramService.getDefaultMediaForAccount(igUsername);
     }
 
     // 8. Securely persist account to database using user identity derived from state
@@ -1022,7 +1008,7 @@ router.post(
         overlayText: `@${account.username.toUpperCase()}`,
       };
 
-      const existing = databaseService.getCachedMedia(account.username) || [];
+      const existing = (await databaseService.getCachedMedia(account.username)) || [];
       const updated = [newReel, ...existing.filter((item: any) => item.id !== newReel.id)];
       databaseService.setCachedMedia(account.username, updated);
       databaseService.setCachedMedia(account.id, updated);
@@ -1118,7 +1104,7 @@ router.post(
         return;
       }
 
-      const existing = databaseService.getCachedMedia(account.username) || [];
+      const existing = (await databaseService.getCachedMedia(account.username)) || [];
       const newReel: any = {
         id: `reel_${Date.now()}`,
         caption: caption?.trim() || `${account.name || account.username} Latest Reel`,
@@ -1258,11 +1244,9 @@ router.post(
       }
 
       if (media.length === 0) {
-        const cached = databaseService.getCachedMedia(account.username) || databaseService.getCachedMedia(account.id);
+        const cached = (await databaseService.getCachedMedia(account.username)) || (await databaseService.getCachedMedia(account.id));
         if (cached && cached.length > 0) {
           media = cached;
-        } else {
-          media = InstagramService.getDefaultMediaForAccount(account.username);
         }
       }
 
@@ -1315,7 +1299,7 @@ router.get(
       const accountHandle = (targetAccount?.username || (typeof req.query.username === 'string' ? req.query.username : '') || 'thevelocityexports').replace(/^@/, '');
 
       // 1. Check if cached live media is already in database memory
-      const cached = databaseService.getCachedMedia(accountHandle) || (targetAccount ? databaseService.getCachedMedia(targetAccount.id) : null);
+      const cached = (await databaseService.getCachedMedia(accountHandle)) || (targetAccount ? await databaseService.getCachedMedia(targetAccount.id) : null);
       if (cached && cached.length > 0) {
         res.json({
           success: true,
@@ -1352,29 +1336,22 @@ router.get(
         }
       }
 
-      // 3. High-definition reel feed tailored to the user's Instagram account
-      const accountMedia = InstagramService.getDefaultMediaForAccount(accountHandle);
-      databaseService.setCachedMedia(accountHandle, accountMedia);
-      if (targetAccount) {
-        databaseService.setCachedMedia(targetAccount.id, accountMedia);
-      }
-
+      // 3. If no media is found, return empty media array
       res.json({
         success: true,
-        media: accountMedia,
+        media: [],
         hasAccount: !!targetAccount,
         hasToken: !!targetAccount?.accessToken,
         account: targetAccount,
-        message: `Retrieved ${accountMedia.length} reels and posts for @${accountHandle}`,
+        message: `0 posts or reels found for @${accountHandle}`,
       });
     } catch (err: any) {
       LoggingService.error('Error in /media endpoint', err);
-      const fallbackMedia = InstagramService.getDefaultMediaForAccount('thevelocityexports');
       res.json({
-        success: true,
-        media: fallbackMedia,
+        success: false,
+        media: [],
         hasAccount: false,
-        message: 'Default media loaded',
+        message: err?.message || 'Failed to fetch media',
       });
     }
   }
@@ -1415,7 +1392,7 @@ router.post(
         commentsCount: 15,
       };
 
-      const cached = databaseService.getCachedMedia(username) || [];
+      const cached = (await databaseService.getCachedMedia(username)) || [];
       const updatedMedia = [importedReel, ...cached.filter((c: any) => c.id !== importedReel.id)];
       databaseService.setCachedMedia(username, updatedMedia);
 

@@ -120,6 +120,33 @@ CREATE TABLE IF NOT EXISTS public.instagram_accounts (
 );
 
 -- ==============================================================================
+-- 5B. INSTAGRAM MEDIA (POSTS & REELS)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.instagram_media (
+  id TEXT NOT NULL,
+  account_id UUID NOT NULL REFERENCES public.instagram_accounts(id) ON DELETE CASCADE,
+  instagram_user_id TEXT NOT NULL,
+  username TEXT NOT NULL,
+  caption TEXT,
+  media_type TEXT NOT NULL,
+  media_product_type TEXT DEFAULT 'FEED',
+  is_reel BOOLEAN NOT NULL DEFAULT false,
+  thumbnail_url TEXT,
+  media_url TEXT,
+  permalink TEXT,
+  like_count INTEGER DEFAULT 0,
+  comments_count INTEGER DEFAULT 0,
+  timestamp TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+  PRIMARY KEY (account_id, id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ig_media_account ON public.instagram_media(account_id);
+CREATE INDEX IF NOT EXISTS idx_ig_media_username ON public.instagram_media(username);
+CREATE INDEX IF NOT EXISTS idx_ig_media_is_reel ON public.instagram_media(is_reel);
+
+-- ==============================================================================
 -- 6. INSTAGRAM CONTACTS & CUSTOM FIELDS
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.instagram_contacts (

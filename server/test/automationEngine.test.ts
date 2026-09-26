@@ -231,9 +231,19 @@ export async function runAllTests(): Promise<{ passed: number; failed: number }>
   assert(retrievedAcc !== null && retrievedAcc.username === 'panchalohajewels', '16. Connected Instagram account retrieval returns active account');
 
   // Test 17: Media cache synchronization & retrieval
-  const sampleMedia = InstagramService.getDefaultMediaForAccount('panchalohajewels');
+  const sampleMedia = [
+    {
+      id: 'reel_test_01',
+      caption: 'Test reel caption',
+      mediaType: 'VIDEO' as const,
+      mediaProductType: 'REELS' as const,
+      isReel: true,
+      permalink: 'https://instagram.com/reel/test01',
+      timestamp: new Date().toISOString(),
+    },
+  ];
   databaseService.setCachedMedia('panchalohajewels', sampleMedia);
-  const cachedMedia = databaseService.getCachedMedia('panchalohajewels');
+  const cachedMedia = await databaseService.getCachedMedia('panchalohajewels');
   assert(Array.isArray(cachedMedia) && cachedMedia.length > 0 && cachedMedia[0].isReel === true, '17. Initial media & reels synchronization stores and retrieves valid media metadata');
 
   // Test 18: Cryptographic HMAC OAuth state generation and validation
@@ -248,6 +258,9 @@ export async function runAllTests(): Promise<{ passed: number; failed: number }>
   // Test 20: Canonical redirect URI consistency
   const authorizeRedirectUri = InstagramService.getRedirectUri();
   assert(authorizeRedirectUri === 'https://instaflowv2.vercel.app/api/instagram/callback', '20. Canonical redirect URI consistently equals https://instaflowv2.vercel.app/api/instagram/callback');
+
+  // Clean up test account
+  await databaseService.deleteInstagramAccount('usr_default_01', testAcc.id);
 
   console.log('\n---------------------------------------------');
   console.log(`TEST RESULTS: ${passed} passed, ${failed} failed`);

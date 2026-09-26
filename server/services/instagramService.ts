@@ -789,9 +789,20 @@ export class InstagramService {
   static isParseableMetaToken(token?: string | null): boolean {
     if (!token || typeof token !== 'string') return false;
     const t = token.trim();
-    if (t.length < 30) return false;
-    if (t.includes('testtoken') || t.includes('dummy') || t.includes('placeholder')) return false;
-    return /^(EAA|IGA|IGQ|[A-Za-z0-9_-]{35,})/.test(t);
+    if (t.length < 35) return false;
+    const lower = t.toLowerCase();
+    if (
+      lower.includes('test') ||
+      lower.includes('mock') ||
+      lower.includes('dummy') ||
+      lower.includes('placeholder') ||
+      lower.includes('secret') ||
+      lower.includes('sample') ||
+      lower.includes('fake')
+    ) {
+      return false;
+    }
+    return /^(EAA[a-zA-Z0-9]{30,}|IGA[a-zA-Z0-9_-]{30,}|IGQ[a-zA-Z0-9_-]{30,})/.test(t);
   }
 
   /**
@@ -802,12 +813,14 @@ export class InstagramService {
     instagramUserId?: string;
     accessToken?: string;
     limit?: number;
+    maxPages?: number;
   }): Promise<{
     success: boolean;
     media: InstagramMediaItem[];
     error?: string;
+    totalFetched?: number;
   }> {
-    const { instagramUserId, accessToken, limit = 50 } = options;
+    const { instagramUserId, accessToken, limit = 50, maxPages = 5 } = options;
 
     const tokenToUse = (accessToken || InstagramService.getServerAccessToken() || '').trim();
 
@@ -815,7 +828,7 @@ export class InstagramService {
       return {
         success: false,
         media: [],
-        error: 'Instagram Access Token not provided. Connect via Meta OAuth, enter your Page/User Access Token, or configure INSTAGRAM_ACCESS_TOKEN.',
+        error: 'Instagram Access Token not provided. Connect via Meta OAuth or configure INSTAGRAM_ACCESS_TOKEN.',
       };
     }
 
@@ -830,9 +843,9 @@ export class InstagramService {
 
     const candidateEndpoints: string[] = [];
 
-    // 1. Direct Instagram Graph User Token media query (Clean, supported fields only!)
+    // 1. Direct Instagram Graph User Token media query (Standard Instagram Login)
     candidateEndpoints.push(
-      `https://graph.instagram.com/v21.0/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,username&limit=${limit}&access_token=${cleanToken}`,
+      `https://graph.instagram.com/v21.0/me/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,username&limit=${limit}&access_token=${cleanToken}`,
       `https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=${limit}&access_token=${cleanToken}`
     );
 
@@ -840,7 +853,7 @@ export class InstagramService {
     if (instagramUserId && /^\d+$/.test(instagramUserId.trim())) {
       candidateEndpoints.unshift(
         `https://graph.facebook.com/v21.0/${instagramUserId.trim()}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=${limit}&access_token=${cleanToken}`,
-        `https://graph.instagram.com/v21.0/${instagramUserId.trim()}/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,username&limit=${limit}&access_token=${cleanToken}`
+        `https://graph.instagram.com/v21.0/${instagramUserId.trim()}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,username&limit=${limit}&access_token=${cleanToken}`
       );
     }
 
@@ -864,52 +877,75 @@ export class InstagramService {
 
     let lastError: any = null;
 
-    for (const url of candidateEndpoints) {
+    for (const initialUrl of candidateEndpoints) {
       try {
-        LoggingService.info(`Attempting to fetch Instagram media from endpoint: ${url.split('?')[0]}`);
-        const response = await fetch(url);
-        const data = await response.json();
+        LoggingService.info(`[Instagram API] Fetching media from endpoint: ${initialUrl.split('?')[0]}`);
+        
+        const allMediaItems: InstagramMediaItem[] = [];
+        let nextUrl: string | null = initialUrl;
+        let pageCount = 0;
 
-        if (response.ok && !data.error) {
-          const rawItems: any[] = data.data || (data.media && data.media.data) || [];
-          if (rawItems && Array.isArray(rawItems) && rawItems.length > 0) {
-            const media: InstagramMediaItem[] = rawItems.map((item) => {
+        while (nextUrl && pageCount < maxPages) {
+          pageCount++;
+          const pageRes: any = await fetch(nextUrl);
+          const pageData: any = await pageRes.json();
+
+          if (!pageRes.ok || pageData.error) {
+            if (pageData.error) {
+              lastError = pageData.error;
+              LoggingService.info(`[Instagram API] Endpoint error note: ${pageData.error.message || JSON.stringify(pageData.error)}`);
+            }
+            break;
+          }
+
+          const rawItems: any[] = pageData.data || (pageData.media && pageData.media.data) || [];
+          if (rawItems && Array.isArray(rawItems)) {
+            for (const item of rawItems) {
+              // Real Reel Detection based on Meta media_product_type or video permalink
               const isReel =
                 item.media_product_type === 'REELS' ||
-                item.media_type === 'VIDEO' ||
-                (item.permalink && item.permalink.includes('/reel/'));
+                (item.media_type === 'VIDEO' && (item.permalink?.includes('/reel/') || item.media_product_type === 'REELS'));
 
-              return {
+              const normalizedMedia: InstagramMediaItem = {
                 id: item.id,
                 caption: item.caption || '',
                 mediaType: item.media_type || 'IMAGE',
                 mediaProductType: item.media_product_type || (isReel ? 'REELS' : 'FEED'),
                 isReel,
-                mediaUrl: item.media_url || item.thumbnail_url || 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=600&q=80',
-                thumbnailUrl: item.thumbnail_url || item.media_url || 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=600&q=80',
-                permalink: item.permalink || `https://www.instagram.com/reel/${item.id}/`,
+                mediaUrl: item.media_url || item.thumbnail_url || undefined,
+                thumbnailUrl: item.thumbnail_url || item.media_url || undefined,
+                permalink: item.permalink || `https://www.instagram.com/p/${item.id}/`,
                 timestamp: item.timestamp || new Date().toISOString(),
-                likeCount: item.like_count ?? 0,
-                commentsCount: item.comments_count ?? 0,
+                likeCount: typeof item.like_count === 'number' ? item.like_count : undefined,
+                commentsCount: typeof item.comments_count === 'number' ? item.comments_count : undefined,
               };
-            });
 
-            LoggingService.info(`Successfully fetched ${media.length} live media items from Meta Graph API`);
-            return {
-              success: true,
-              media,
-            };
+              allMediaItems.push(normalizedMedia);
+            }
           }
-        } else if (data.error) {
-          lastError = data.error;
-          LoggingService.info(`Candidate endpoint check note: ${data.error.message || JSON.stringify(data.error)}`);
-          if (data.error.code === 190 || data.error.message?.includes('Cannot parse access token')) {
-            break;
-          }
+
+          // Cursor-based pagination from Meta Graph API
+          nextUrl = pageData.paging?.next || null;
+        }
+
+        if (allMediaItems.length > 0) {
+          LoggingService.info(`[Instagram API] Successfully retrieved ${allMediaItems.length} real Instagram media items across ${pageCount} page(s)`);
+          return {
+            success: true,
+            media: allMediaItems,
+            totalFetched: allMediaItems.length,
+          };
+        } else if (!lastError) {
+          LoggingService.info(`[Instagram API] Successfully queried endpoint, 0 media items currently published on this account.`);
+          return {
+            success: true,
+            media: [],
+            totalFetched: 0,
+          };
         }
       } catch (err: any) {
         lastError = err;
-        LoggingService.info(`Candidate fetch notice on ${url.split('?')[0]}: ${err?.message || err}`);
+        LoggingService.info(`[Instagram API] Candidate fetch error on ${initialUrl.split('?')[0]}: ${err?.message || err}`);
       }
     }
 
@@ -1224,10 +1260,7 @@ export class InstagramService {
       limit: 50,
     });
 
-    let mediaToReturn = mediaResult.media || [];
-    if (mediaToReturn.length === 0) {
-      mediaToReturn = InstagramService.getDefaultMediaForAccount(finalUsername);
-    }
+    const mediaToReturn = mediaResult.media || [];
 
     return {
       success: true,
@@ -1235,178 +1268,13 @@ export class InstagramService {
         id: finalId,
         username: finalUsername,
         name: finalName,
-        profilePictureUrl: profilePictureUrl || 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=200&q=80',
-        followersCount: followersCount || 1240,
+        profilePictureUrl: profilePictureUrl || undefined,
+        followersCount: followersCount || undefined,
         mediaCount: mediaToReturn.length,
       },
       media: mediaToReturn,
       error: mediaResult.error || metaErrorMessage,
     };
-  }
-
-  /**
-   * Returns rich, high-definition tailored media items for an Instagram handle
-   */
-  static getDefaultMediaForAccount(username: string): InstagramMediaItem[] {
-    const accountHandle = (username || 'thevelocityexports').replace(/^@/, '').trim().toLowerCase();
-    const isVajra =
-      accountHandle.includes('vajra') ||
-      accountHandle.includes('makuta') ||
-      accountHandle.includes('jewel') ||
-      accountHandle.includes('panchaloha');
-
-    if (isVajra) {
-      return [
-        {
-          id: `reel_vajra_01`,
-          caption: `vajramakutajewellers ✨ FESTIVALS ARE COMING — CELEBRATE WITH TIMELESS TRADITION! ✨ This festive season, adorn your celebrations with the elegance of a beautiful black beats from Vajramukuta Pancha Loha Jewellers. 💛✨ A symbol of tradition, love and timeless beauty — our black beats collection brings together classic designs and beautiful craftsmanship for your special occasions. 🙏✨ Festive Season • Timeless Tradition • Beautiful Jewellery ✨ Dilsukhnagar Branch Metro Pillar No. A1511 & A1519. Beside Karnataka Bank`,
-          mediaType: 'VIDEO',
-          mediaProductType: 'REELS',
-          isReel: true,
-          thumbnailUrl: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=600&q=80',
-          mediaUrl: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=600&q=80',
-          permalink: `https://www.instagram.com/vajramakutajewellers/reel/black_beads_01/`,
-          timestamp: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
-          likeCount: 51,
-          commentsCount: 1,
-          tag: 'VAJRAMAKUTA JEWELLERS',
-          overlayText: 'VAJRAMAKUTA JEWELLERS',
-        },
-        {
-          id: `reel_vajra_02`,
-          caption: `vajramakutajewellers 🌟 Discover the golden glow of Panchaloha handcrafted ear ornaments. Pure craftsmanship for weddings & festive occasions! Comment PRICE for catalog.`,
-          mediaType: 'VIDEO',
-          mediaProductType: 'REELS',
-          isReel: true,
-          thumbnailUrl: 'https://images.unsplash.com/photo-1630019852942-f89202989a59?auto=format&fit=crop&w=600&q=80',
-          mediaUrl: 'https://images.unsplash.com/photo-1630019852942-f89202989a59?auto=format&fit=crop&w=600&q=80',
-          permalink: `https://www.instagram.com/vajramakutajewellers/reel/gold_earrings_02/`,
-          timestamp: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
-          likeCount: 89,
-          commentsCount: 12,
-          tag: 'VAJRAMAKUTA JEWELLERS',
-          overlayText: 'VAJRAMAKUTA JEWELLERS',
-        },
-        {
-          id: `reel_vajra_03`,
-          caption: `vajramakutajewellers 💎 Explore our signature temple jewellery sets crafted in 5-metal Panchaloha alloy. Visit our Dilsukhnagar flagship store or DM for video shopping!`,
-          mediaType: 'VIDEO',
-          mediaProductType: 'REELS',
-          isReel: true,
-          thumbnailUrl: 'https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?auto=format&fit=crop&w=600&q=80',
-          mediaUrl: 'https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?auto=format&fit=crop&w=600&q=80',
-          permalink: `https://www.instagram.com/vajramakutajewellers/reel/temple_collection_03/`,
-          timestamp: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
-          likeCount: 124,
-          commentsCount: 19,
-          tag: 'VAJRAMAKUTA JEWELLERS',
-          overlayText: 'VAJRAMAKUTA JEWELLERS',
-        },
-        {
-          id: `reel_vajra_04`,
-          caption: `vajramakutajewellers ✨ Traditional Plain Panchaloha Bangles with lifetime shine guarantee. Comment BANGLES or SIZE to order yours today!`,
-          mediaType: 'VIDEO',
-          mediaProductType: 'REELS',
-          isReel: true,
-          thumbnailUrl: 'https://images.unsplash.com/photo-1602751584552-8ba73aad10e1?auto=format&fit=crop&w=600&q=80',
-          mediaUrl: 'https://images.unsplash.com/photo-1602751584552-8ba73aad10e1?auto=format&fit=crop&w=600&q=80',
-          permalink: `https://www.instagram.com/vajramakutajewellers/reel/plain_bangles_04/`,
-          timestamp: new Date(Date.now() - 72 * 3600 * 1000).toISOString(),
-          likeCount: 210,
-          commentsCount: 34,
-          tag: 'PLAIN BANGLES',
-          overlayText: 'PLAIN BANGLES',
-        },
-      ];
-    }
-
-    const isVelocity =
-      accountHandle.includes('velocity') ||
-      accountHandle.includes('export') ||
-      accountHandle === 'thevelocityexports';
-
-    if (isVelocity) {
-      return [
-        {
-          id: `reel_${accountHandle}_01`,
-          caption: `@${accountHandle} 📦 New Export Consignment dispatched to North America & Europe! Premium Grade Quality Guaranteed. ✈️ Comment CATALOG or PRICE to get our full product catalog and FOB price sheet!`,
-          mediaType: 'VIDEO',
-          mediaProductType: 'REELS',
-          isReel: true,
-          thumbnailUrl: 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=600&q=80',
-          mediaUrl: 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=600&q=80',
-          permalink: `https://www.instagram.com/${accountHandle}/reel/export_consignment_01/`,
-          timestamp: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
-          likeCount: 142,
-          commentsCount: 18,
-          tag: 'EXPORT CARGO',
-          overlayText: 'GLOBAL SHIPMENT',
-        },
-        {
-          id: `reel_${accountHandle}_02`,
-          caption: `@${accountHandle} 🚢 Port Loading & Container Clearance Completed. Fast worldwide shipping with full tracking. Comment SHIP to get container status & shipping schedules!`,
-          mediaType: 'VIDEO',
-          mediaProductType: 'REELS',
-          isReel: true,
-          thumbnailUrl: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80',
-          mediaUrl: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80',
-          permalink: `https://www.instagram.com/${accountHandle}/reel/container_loading_02/`,
-          timestamp: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
-          likeCount: 215,
-          commentsCount: 24,
-          tag: 'CONTAINER LOGISTICS',
-          overlayText: 'PORT DISPATCH',
-        },
-        {
-          id: `reel_${accountHandle}_03`,
-          caption: `@${accountHandle} ⚙️ Factory Floor Quality Check & Packaging Line. Certified standards for global export markets. Comment DETAILS for minimum order quantities and bulk pricing!`,
-          mediaType: 'VIDEO',
-          mediaProductType: 'REELS',
-          isReel: true,
-          thumbnailUrl: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=80',
-          mediaUrl: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=80',
-          permalink: `https://www.instagram.com/${accountHandle}/reel/factory_check_03/`,
-          timestamp: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
-          likeCount: 389,
-          commentsCount: 31,
-          tag: 'QUALITY CHECK',
-          overlayText: 'FACTORY INSPECTION',
-        },
-        {
-          id: `reel_${accountHandle}_04`,
-          caption: `@${accountHandle} 🌐 Velocity Exports Global Trade Network. Partnering with distributors across 35+ countries. Comment CONNECT to speak with our international trade manager!`,
-          mediaType: 'VIDEO',
-          mediaProductType: 'REELS',
-          isReel: true,
-          thumbnailUrl: 'https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=600&q=80',
-          mediaUrl: 'https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=600&q=80',
-          permalink: `https://www.instagram.com/${accountHandle}/reel/global_trade_04/`,
-          timestamp: new Date(Date.now() - 72 * 3600 * 1000).toISOString(),
-          likeCount: 460,
-          commentsCount: 42,
-          tag: 'GLOBAL TRADE',
-          overlayText: 'WORLDWIDE EXPORTS',
-        },
-      ];
-    }
-
-    return [
-      {
-        id: `reel_${accountHandle}_01`,
-        caption: `@${accountHandle} ✨ Official Instagram Reel! Comment INFO to receive full product details directly in your DM.`,
-        mediaType: 'VIDEO',
-        mediaProductType: 'REELS',
-        isReel: true,
-        thumbnailUrl: 'https://images.unsplash.com/photo-1611591475879-114c004d80a1?auto=format&fit=crop&w=600&q=80',
-        mediaUrl: 'https://images.unsplash.com/photo-1611591475879-114c004d80a1?auto=format&fit=crop&w=600&q=80',
-        permalink: `https://www.instagram.com/${accountHandle}/reel/official_01/`,
-        timestamp: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
-        likeCount: 74,
-        commentsCount: 8,
-        tag: 'FEATURED',
-        overlayText: `@${accountHandle.toUpperCase()}`,
-      },
-    ];
   }
 
   /**

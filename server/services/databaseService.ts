@@ -68,72 +68,6 @@ export class DatabaseService {
             this.cachedMedia.set(k, v as InstagramMediaItem[]);
           });
         }
-        // Ensure thevelocityexports has its live media initialized if empty
-        if (!this.cachedMedia.has('thevelocityexports') || (this.cachedMedia.get('thevelocityexports')?.length || 0) === 0) {
-          const defaultReels: InstagramMediaItem[] = [
-            {
-              id: 'reel_thevelocityexports_01',
-              caption: '@thevelocityexports 📦 New Export Consignment dispatched to North America & Europe! Premium Grade Quality Guaranteed. ✈️ Comment CATALOG or PRICE to get our full product catalog and FOB price sheet!',
-              mediaType: 'VIDEO',
-              mediaProductType: 'REELS',
-              isReel: true,
-              thumbnailUrl: 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=600&q=80',
-              mediaUrl: 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=600&q=80',
-              permalink: 'https://www.instagram.com/thevelocityexports/reel/export_consignment_01/',
-              timestamp: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
-              likeCount: 142,
-              commentsCount: 18,
-              tag: 'EXPORT CARGO',
-              overlayText: 'GLOBAL SHIPMENT',
-            },
-            {
-              id: 'reel_thevelocityexports_02',
-              caption: '@thevelocityexports 🚢 Port Loading & Container Clearance Completed. Fast worldwide shipping with full tracking. Comment SHIP to get container status & shipping schedules!',
-              mediaType: 'VIDEO',
-              mediaProductType: 'REELS',
-              isReel: true,
-              thumbnailUrl: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80',
-              mediaUrl: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80',
-              permalink: 'https://www.instagram.com/thevelocityexports/reel/container_loading_02/',
-              timestamp: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
-              likeCount: 215,
-              commentsCount: 24,
-              tag: 'CONTAINER LOGISTICS',
-              overlayText: 'PORT DISPATCH',
-            },
-            {
-              id: 'reel_thevelocityexports_03',
-              caption: '@thevelocityexports ⚙️ Factory Floor Quality Check & Packaging Line. Certified standards for global export markets. Comment DETAILS for minimum order quantities and bulk pricing!',
-              mediaType: 'VIDEO',
-              mediaProductType: 'REELS',
-              isReel: true,
-              thumbnailUrl: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=80',
-              mediaUrl: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=80',
-              permalink: 'https://www.instagram.com/thevelocityexports/reel/factory_check_03/',
-              timestamp: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
-              likeCount: 389,
-              commentsCount: 31,
-              tag: 'QUALITY CHECK',
-              overlayText: 'FACTORY INSPECTION',
-            },
-            {
-              id: 'reel_thevelocityexports_04',
-              caption: '@thevelocityexports 🌐 Velocity Exports Global Trade Network. Partnering with distributors across 35+ countries. Comment CONNECT to speak with our international trade manager!',
-              mediaType: 'VIDEO',
-              mediaProductType: 'REELS',
-              isReel: true,
-              thumbnailUrl: 'https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=600&q=80',
-              mediaUrl: 'https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=600&q=80',
-              permalink: 'https://www.instagram.com/thevelocityexports/reel/global_trade_04/',
-              timestamp: new Date(Date.now() - 72 * 3600 * 1000).toISOString(),
-              likeCount: 460,
-              commentsCount: 42,
-              tag: 'GLOBAL TRADE',
-              overlayText: 'WORLDWIDE EXPORTS',
-            },
-          ];
-          this.cachedMedia.set('thevelocityexports', defaultReels);
-        }
         if (data.logs && Array.isArray(data.logs)) {
           this.logs = data.logs;
         }
@@ -527,15 +461,13 @@ export class DatabaseService {
         a.instagramUserId === instagramUserId
     );
 
-    const resolvedAvatar = data.profilePictureUrl || `https://unavatar.io/instagram/${cleanUsername}`;
-
     if (account) {
       account.username = cleanUsername;
       account.name = data.name || cleanUsername;
       account.userId = validUserId;
       account.isConnected = true;
       if (data.accessToken) account.accessToken = data.accessToken;
-      account.profilePictureUrl = data.profilePictureUrl || account.profilePictureUrl || resolvedAvatar;
+      if (data.profilePictureUrl) account.profilePictureUrl = data.profilePictureUrl;
       account.updatedAt = now;
     } else {
       account = {
@@ -544,7 +476,7 @@ export class DatabaseService {
         instagramUserId,
         username: cleanUsername,
         name: data.name || cleanUsername,
-        profilePictureUrl: resolvedAvatar,
+        profilePictureUrl: data.profilePictureUrl,
         accessToken: data.accessToken,
         isConnected: true,
         connectedAt: now,
@@ -580,7 +512,7 @@ export class DatabaseService {
           name: account.name,
           display_name: account.name,
           access_token: data.accessToken || account.accessToken || null,
-          profile_picture_url: data.profilePictureUrl || account.profilePictureUrl || null,
+          profile_picture_url: account.profilePictureUrl || null,
           is_connected: true,
           updated_at: now,
         });
@@ -616,21 +548,92 @@ export class DatabaseService {
     return true;
   }
 
-  // Media Cache for Instagram Accounts
+  // Media Cache and Persistent Storage for Instagram Accounts
   setCachedMedia(accountKey: string, media: InstagramMediaItem[]): void {
     const cleanKey = accountKey.toLowerCase().replace(/^@/, '').trim();
     this.cachedMedia.set(cleanKey, media);
     this.saveToDisk();
   }
 
-  getCachedMedia(accountKey: string): InstagramMediaItem[] | null {
+  async saveInstagramMedia(accountId: string, mediaItems: InstagramMediaItem[]): Promise<void> {
+    const account = this.accounts.get(accountId) || Array.from(this.accounts.values()).find(a => a.id === accountId || a.username.toLowerCase() === accountId.toLowerCase());
+    const accountKey = account ? account.username : accountId;
+    this.setCachedMedia(accountKey, mediaItems);
+    if (account) {
+      this.setCachedMedia(account.id, mediaItems);
+    }
+
+    if (this.ensureClient() && this.supabase && account) {
+      try {
+        const rows = mediaItems.map((m) => ({
+          id: m.id,
+          account_id: account.id,
+          instagram_user_id: account.instagramUserId,
+          username: account.username,
+          caption: m.caption || null,
+          media_type: m.mediaType,
+          media_product_type: m.mediaProductType || 'FEED',
+          is_reel: Boolean(m.isReel),
+          thumbnail_url: m.thumbnailUrl || null,
+          media_url: m.mediaUrl || null,
+          permalink: m.permalink || null,
+          like_count: m.likeCount || 0,
+          comments_count: m.commentsCount || 0,
+          timestamp: m.timestamp || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }));
+
+        if (rows.length > 0) {
+          await this.supabase.from('instagram_media').upsert(rows, { onConflict: 'account_id,id' });
+        }
+      } catch (err) {
+        LoggingService.warn('Could not persist media rows to Supabase (using memory/disk store)', err);
+      }
+    }
+  }
+
+  async getCachedMedia(accountKey: string): Promise<InstagramMediaItem[] | null> {
     const cleanKey = accountKey.toLowerCase().replace(/^@/, '').trim();
     const media = this.cachedMedia.get(cleanKey);
     if (media && media.length > 0) return media;
-    if (cleanKey.includes('velocity') || cleanKey.includes('export') || cleanKey === 'thevelocityexports') {
-      const velMedia = this.cachedMedia.get('thevelocityexports');
-      if (velMedia && velMedia.length > 0) return velMedia;
+
+    // Check by account ID in cache
+    const byId = this.cachedMedia.get(accountKey);
+    if (byId && byId.length > 0) return byId;
+
+    // Check in Supabase if available
+    if (this.ensureClient() && this.supabase) {
+      try {
+        const account = Array.from(this.accounts.values()).find(
+          a => a.username.toLowerCase() === cleanKey || a.id === accountKey
+        );
+        const filterKey = account ? account.id : accountKey;
+        const { data, error } = await this.supabase
+          .from('instagram_media')
+          .select('*')
+          .or(`account_id.eq.${filterKey},username.ilike.${cleanKey}`)
+          .order('timestamp', { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          const mapped: InstagramMediaItem[] = data.map((d: any) => ({
+            id: d.id,
+            caption: d.caption,
+            mediaType: d.media_type,
+            mediaProductType: d.media_product_type,
+            isReel: d.is_reel,
+            thumbnailUrl: d.thumbnail_url,
+            mediaUrl: d.media_url,
+            permalink: d.permalink,
+            timestamp: d.timestamp,
+            likeCount: d.like_count,
+            commentsCount: d.comments_count,
+          }));
+          this.setCachedMedia(cleanKey, mapped);
+          return mapped;
+        }
+      } catch (_) {}
     }
+
     return null;
   }
 
