@@ -2188,8 +2188,73 @@ ${linkButtonText ? `\u{1F517} ${linkButtonText}: ` : ""}${linkUrl}` : message;
        * Returns rich, high-definition tailored media items for an Instagram handle
        */
       static getDefaultMediaForAccount(username) {
-        const accountHandle = (username || "thevelocityexports").replace(/^@/, "").trim();
-        const isVelocity = accountHandle.toLowerCase().includes("velocity") || accountHandle.toLowerCase().includes("export") || accountHandle.toLowerCase() === "thevelocityexports";
+        const accountHandle = (username || "thevelocityexports").replace(/^@/, "").trim().toLowerCase();
+        const isVajra = accountHandle.includes("vajra") || accountHandle.includes("makuta") || accountHandle.includes("jewel") || accountHandle.includes("panchaloha");
+        if (isVajra) {
+          return [
+            {
+              id: `reel_vajra_01`,
+              caption: `vajramakutajewellers \u2728 FESTIVALS ARE COMING \u2014 CELEBRATE WITH TIMELESS TRADITION! \u2728 This festive season, adorn your celebrations with the elegance of a beautiful black beats from Vajramukuta Pancha Loha Jewellers. \u{1F49B}\u2728 A symbol of tradition, love and timeless beauty \u2014 our black beats collection brings together classic designs and beautiful craftsmanship for your special occasions. \u{1F64F}\u2728 Festive Season \u2022 Timeless Tradition \u2022 Beautiful Jewellery \u2728 Dilsukhnagar Branch Metro Pillar No. A1511 & A1519. Beside Karnataka Bank`,
+              mediaType: "VIDEO",
+              mediaProductType: "REELS",
+              isReel: true,
+              thumbnailUrl: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=600&q=80",
+              mediaUrl: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=600&q=80",
+              permalink: `https://www.instagram.com/vajramakutajewellers/reel/black_beads_01/`,
+              timestamp: new Date(Date.now() - 2 * 3600 * 1e3).toISOString(),
+              likeCount: 51,
+              commentsCount: 1,
+              tag: "VAJRAMAKUTA JEWELLERS",
+              overlayText: "VAJRAMAKUTA JEWELLERS"
+            },
+            {
+              id: `reel_vajra_02`,
+              caption: `vajramakutajewellers \u{1F31F} Discover the golden glow of Panchaloha handcrafted ear ornaments. Pure craftsmanship for weddings & festive occasions! Comment PRICE for catalog.`,
+              mediaType: "VIDEO",
+              mediaProductType: "REELS",
+              isReel: true,
+              thumbnailUrl: "https://images.unsplash.com/photo-1630019852942-f89202989a59?auto=format&fit=crop&w=600&q=80",
+              mediaUrl: "https://images.unsplash.com/photo-1630019852942-f89202989a59?auto=format&fit=crop&w=600&q=80",
+              permalink: `https://www.instagram.com/vajramakutajewellers/reel/gold_earrings_02/`,
+              timestamp: new Date(Date.now() - 24 * 3600 * 1e3).toISOString(),
+              likeCount: 89,
+              commentsCount: 12,
+              tag: "VAJRAMAKUTA JEWELLERS",
+              overlayText: "VAJRAMAKUTA JEWELLERS"
+            },
+            {
+              id: `reel_vajra_03`,
+              caption: `vajramakutajewellers \u{1F48E} Explore our signature temple jewellery sets crafted in 5-metal Panchaloha alloy. Visit our Dilsukhnagar flagship store or DM for video shopping!`,
+              mediaType: "VIDEO",
+              mediaProductType: "REELS",
+              isReel: true,
+              thumbnailUrl: "https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?auto=format&fit=crop&w=600&q=80",
+              mediaUrl: "https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?auto=format&fit=crop&w=600&q=80",
+              permalink: `https://www.instagram.com/vajramakutajewellers/reel/temple_collection_03/`,
+              timestamp: new Date(Date.now() - 48 * 3600 * 1e3).toISOString(),
+              likeCount: 124,
+              commentsCount: 19,
+              tag: "VAJRAMAKUTA JEWELLERS",
+              overlayText: "VAJRAMAKUTA JEWELLERS"
+            },
+            {
+              id: `reel_vajra_04`,
+              caption: `vajramakutajewellers \u2728 Traditional Plain Panchaloha Bangles with lifetime shine guarantee. Comment BANGLES or SIZE to order yours today!`,
+              mediaType: "VIDEO",
+              mediaProductType: "REELS",
+              isReel: true,
+              thumbnailUrl: "https://images.unsplash.com/photo-1602751584552-8ba73aad10e1?auto=format&fit=crop&w=600&q=80",
+              mediaUrl: "https://images.unsplash.com/photo-1602751584552-8ba73aad10e1?auto=format&fit=crop&w=600&q=80",
+              permalink: `https://www.instagram.com/vajramakutajewellers/reel/plain_bangles_04/`,
+              timestamp: new Date(Date.now() - 72 * 3600 * 1e3).toISOString(),
+              likeCount: 210,
+              commentsCount: 34,
+              tag: "PLAIN BANGLES",
+              overlayText: "PLAIN BANGLES"
+            }
+          ];
+        }
+        const isVelocity = accountHandle.includes("velocity") || accountHandle.includes("export") || accountHandle === "thevelocityexports";
         if (isVelocity) {
           return [
             {

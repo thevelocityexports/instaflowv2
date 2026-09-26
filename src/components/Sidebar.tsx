@@ -107,11 +107,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <div className="flex items-center gap-2.5 min-w-0">
                 {/* Account Profile Picture */}
-                <div className="relative shrink-0 w-8 h-8 rounded-full overflow-hidden border border-slate-200 shadow-xs bg-slate-100 flex items-center justify-center">
+                <div className="relative shrink-0 w-8 h-8 rounded-full overflow-hidden border border-slate-200/80 shadow-2xs bg-[#0a180f] flex items-center justify-center">
                   <img
                     src={
                       connectedAccount.profilePictureUrl ||
-                      `https://unavatar.io/instagram/${connectedAccount.username}`
+                      (connectedAccount.username.toLowerCase().includes('vajra') || connectedAccount.username.toLowerCase().includes('jewel')
+                        ? 'https://images.unsplash.com/photo-1611591475879-114c004d80a1?auto=format&fit=crop&w=200&q=80'
+                        : `https://unavatar.io/instagram/${connectedAccount.username}`)
                     }
                     alt={connectedAccount.username}
                     referrerPolicy="no-referrer"
@@ -120,8 +122,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     onError={(e) => {
                       if (!e.currentTarget.src.includes('dicebear')) {
                         e.currentTarget.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
-                          connectedAccount.name || connectedAccount.username || 'IG'
-                        )}`;
+                          connectedAccount.name || connectedAccount.username || 'VM'
+                        )}&backgroundColor=0a180f&textColor=c5a059`;
                       }
                     }}
                   />

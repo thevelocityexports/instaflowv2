@@ -71,7 +71,78 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
   // Helper for generating initial account reels
   const getDefaultReels = (handle: string): InstagramMediaItem[] => {
-    const clean = (handle || 'thevelocityexports').replace(/^@/, '');
+    const clean = (handle || 'thevelocityexports').replace(/^@/, '').trim().toLowerCase();
+    const isVajra =
+      clean.includes('vajra') ||
+      clean.includes('makuta') ||
+      clean.includes('jewel') ||
+      clean.includes('panchaloha');
+
+    if (isVajra) {
+      return [
+        {
+          id: `reel_vajra_01`,
+          caption: `vajramakutajewellers ✨ FESTIVALS ARE COMING — CELEBRATE WITH TIMELESS TRADITION! ✨ This festive season, adorn your celebrations with the elegance of a beautiful black beats from Vajramukuta Pancha Loha Jewellers. 💛✨ A symbol of tradition, love and timeless beauty — our black beats collection brings together classic designs and beautiful craftsmanship for your special occasions. 🙏✨ Festive Season • Timeless Tradition • Beautiful Jewellery ✨ Dilsukhnagar Branch Metro Pillar No. A1511 & A1519. Beside Karnataka Bank`,
+          mediaType: 'VIDEO',
+          mediaProductType: 'REELS',
+          isReel: true,
+          thumbnailUrl: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=600&q=80',
+          mediaUrl: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=600&q=80',
+          permalink: `https://www.instagram.com/vajramakutajewellers/reel/black_beads_01/`,
+          timestamp: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
+          likeCount: 51,
+          commentsCount: 1,
+          tag: 'VAJRAMAKUTA JEWELLERS',
+          overlayText: 'VAJRAMAKUTA JEWELLERS',
+        } as any,
+        {
+          id: `reel_vajra_02`,
+          caption: `vajramakutajewellers 🌟 Discover the golden glow of Panchaloha handcrafted ear ornaments. Pure craftsmanship for weddings & festive occasions! Comment PRICE for catalog.`,
+          mediaType: 'VIDEO',
+          mediaProductType: 'REELS',
+          isReel: true,
+          thumbnailUrl: 'https://images.unsplash.com/photo-1630019852942-f89202989a59?auto=format&fit=crop&w=600&q=80',
+          mediaUrl: 'https://images.unsplash.com/photo-1630019852942-f89202989a59?auto=format&fit=crop&w=600&q=80',
+          permalink: `https://www.instagram.com/vajramakutajewellers/reel/gold_earrings_02/`,
+          timestamp: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
+          likeCount: 89,
+          commentsCount: 12,
+          tag: 'VAJRAMAKUTA JEWELLERS',
+          overlayText: 'VAJRAMAKUTA JEWELLERS',
+        } as any,
+        {
+          id: `reel_vajra_03`,
+          caption: `vajramakutajewellers 💎 Explore our signature temple jewellery sets crafted in 5-metal Panchaloha alloy. Visit our Dilsukhnagar flagship store or DM for video shopping!`,
+          mediaType: 'VIDEO',
+          mediaProductType: 'REELS',
+          isReel: true,
+          thumbnailUrl: 'https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?auto=format&fit=crop&w=600&q=80',
+          mediaUrl: 'https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?auto=format&fit=crop&w=600&q=80',
+          permalink: `https://www.instagram.com/vajramakutajewellers/reel/temple_collection_03/`,
+          timestamp: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
+          likeCount: 124,
+          commentsCount: 19,
+          tag: 'VAJRAMAKUTA JEWELLERS',
+          overlayText: 'VAJRAMAKUTA JEWELLERS',
+        } as any,
+        {
+          id: `reel_vajra_04`,
+          caption: `vajramakutajewellers ✨ Traditional Plain Panchaloha Bangles with lifetime shine guarantee. Comment BANGLES or SIZE to order yours today!`,
+          mediaType: 'VIDEO',
+          mediaProductType: 'REELS',
+          isReel: true,
+          thumbnailUrl: 'https://images.unsplash.com/photo-1602751584552-8ba73aad10e1?auto=format&fit=crop&w=600&q=80',
+          mediaUrl: 'https://images.unsplash.com/photo-1602751584552-8ba73aad10e1?auto=format&fit=crop&w=600&q=80',
+          permalink: `https://www.instagram.com/vajramakutajewellers/reel/plain_bangles_04/`,
+          timestamp: new Date(Date.now() - 72 * 3600 * 1000).toISOString(),
+          likeCount: 210,
+          commentsCount: 34,
+          tag: 'PLAIN BANGLES',
+          overlayText: 'PLAIN BANGLES',
+        } as any,
+      ];
+    }
+
     return [
       {
         id: `reel_${clean}_01`,
@@ -869,8 +940,20 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   {/* Account Header */}
                   <div className="p-2.5 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-[#0a180f] border border-[#c5a059] flex items-center justify-center text-[7px] font-bold text-[#c5a059] leading-none shrink-0">
-                        {activeUsername.slice(0, 2).toUpperCase()}
+                      <div className="w-7 h-7 rounded-full overflow-hidden border border-slate-200 bg-[#0a180f] flex items-center justify-center text-[8px] font-bold text-[#c5a059] leading-none shrink-0 shadow-2xs">
+                        <img
+                          src={
+                            connectedAccount?.profilePictureUrl ||
+                            `https://unavatar.io/instagram/${activeUsername}`
+                          }
+                          alt={activeUsername}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+                              activeName || activeUsername
+                            )}`;
+                          }}
+                        />
                       </div>
                       <span className="font-bold text-[11px] text-slate-900 truncate max-w-[170px]">
                         {activeUsername}

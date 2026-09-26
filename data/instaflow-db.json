@@ -5,7 +5,7 @@
       "email": "thevelocityexports@gmail.com",
       "fullName": "Velocity Exports Admin",
       "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80",
-      "createdAt": "2026-09-26T14:10:00.420Z"
+      "createdAt": "2026-09-26T14:18:21.026Z"
     },
     {
       "id": "9a419b75-cb04-49f9-a69b-b7d1a8e88a5d",
@@ -19,7 +19,7 @@
       "email": "thevelocityexports@gmail.com",
       "fullName": "Velocity Exports Admin",
       "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80",
-      "createdAt": "2026-09-26T14:10:00.420Z"
+      "createdAt": "2026-09-26T14:18:21.026Z"
     }
   ],
   "accounts": [
@@ -45,7 +45,7 @@
       "accessToken": "EAATestToken_Secret_DoNotExpose",
       "isConnected": true,
       "connectedAt": "2026-09-26T13:47:06.403Z",
-      "updatedAt": "2026-09-26T14:10:10.668Z"
+      "updatedAt": "2026-09-26T14:18:32.535Z"
     }
   ],
   "automations": [],
@@ -176,23 +176,179 @@
     ],
     "panchalohajewels": [
       {
-        "id": "reel_panchalohajewels_01",
-        "caption": "@panchalohajewels ✨ Official Instagram Reel! Comment INFO to receive full product details directly in your DM.",
+        "id": "reel_vajra_01",
+        "caption": "vajramakutajewellers ✨ FESTIVALS ARE COMING — CELEBRATE WITH TIMELESS TRADITION! ✨ This festive season, adorn your celebrations with the elegance of a beautiful black beats from Vajramukuta Pancha Loha Jewellers. 💛✨ A symbol of tradition, love and timeless beauty — our black beats collection brings together classic designs and beautiful craftsmanship for your special occasions. 🙏✨ Festive Season • Timeless Tradition • Beautiful Jewellery ✨ Dilsukhnagar Branch Metro Pillar No. A1511 & A1519. Beside Karnataka Bank",
         "mediaType": "VIDEO",
         "mediaProductType": "REELS",
         "isReel": true,
-        "thumbnailUrl": "https://images.unsplash.com/photo-1611591475879-114c004d80a1?auto=format&fit=crop&w=600&q=80",
-        "mediaUrl": "https://images.unsplash.com/photo-1611591475879-114c004d80a1?auto=format&fit=crop&w=600&q=80",
-        "permalink": "https://www.instagram.com/panchalohajewels/reel/official_01/",
-        "timestamp": "2026-09-26T12:10:11.184Z",
-        "likeCount": 74,
-        "commentsCount": 8,
-        "tag": "FEATURED",
-        "overlayText": "@PANCHALOHAJEWELS"
+        "thumbnailUrl": "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=600&q=80",
+        "mediaUrl": "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=600&q=80",
+        "permalink": "https://www.instagram.com/vajramakutajewellers/reel/black_beads_01/",
+        "timestamp": "2026-09-26T12:18:33.169Z",
+        "likeCount": 51,
+        "commentsCount": 1,
+        "tag": "VAJRAMAKUTA JEWELLERS",
+        "overlayText": "VAJRAMAKUTA JEWELLERS"
+      },
+      {
+        "id": "reel_vajra_02",
+        "caption": "vajramakutajewellers 🌟 Discover the golden glow of Panchaloha handcrafted ear ornaments. Pure craftsmanship for weddings & festive occasions! Comment PRICE for catalog.",
+        "mediaType": "VIDEO",
+        "mediaProductType": "REELS",
+        "isReel": true,
+        "thumbnailUrl": "https://images.unsplash.com/photo-1630019852942-f89202989a59?auto=format&fit=crop&w=600&q=80",
+        "mediaUrl": "https://images.unsplash.com/photo-1630019852942-f89202989a59?auto=format&fit=crop&w=600&q=80",
+        "permalink": "https://www.instagram.com/vajramakutajewellers/reel/gold_earrings_02/",
+        "timestamp": "2026-09-25T14:18:33.169Z",
+        "likeCount": 89,
+        "commentsCount": 12,
+        "tag": "VAJRAMAKUTA JEWELLERS",
+        "overlayText": "VAJRAMAKUTA JEWELLERS"
+      },
+      {
+        "id": "reel_vajra_03",
+        "caption": "vajramakutajewellers 💎 Explore our signature temple jewellery sets crafted in 5-metal Panchaloha alloy. Visit our Dilsukhnagar flagship store or DM for video shopping!",
+        "mediaType": "VIDEO",
+        "mediaProductType": "REELS",
+        "isReel": true,
+        "thumbnailUrl": "https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?auto=format&fit=crop&w=600&q=80",
+        "mediaUrl": "https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?auto=format&fit=crop&w=600&q=80",
+        "permalink": "https://www.instagram.com/vajramakutajewellers/reel/temple_collection_03/",
+        "timestamp": "2026-09-24T14:18:33.169Z",
+        "likeCount": 124,
+        "commentsCount": 19,
+        "tag": "VAJRAMAKUTA JEWELLERS",
+        "overlayText": "VAJRAMAKUTA JEWELLERS"
+      },
+      {
+        "id": "reel_vajra_04",
+        "caption": "vajramakutajewellers ✨ Traditional Plain Panchaloha Bangles with lifetime shine guarantee. Comment BANGLES or SIZE to order yours today!",
+        "mediaType": "VIDEO",
+        "mediaProductType": "REELS",
+        "isReel": true,
+        "thumbnailUrl": "https://images.unsplash.com/photo-1602751584552-8ba73aad10e1?auto=format&fit=crop&w=600&q=80",
+        "mediaUrl": "https://images.unsplash.com/photo-1602751584552-8ba73aad10e1?auto=format&fit=crop&w=600&q=80",
+        "permalink": "https://www.instagram.com/vajramakutajewellers/reel/plain_bangles_04/",
+        "timestamp": "2026-09-23T14:18:33.169Z",
+        "likeCount": 210,
+        "commentsCount": 34,
+        "tag": "PLAIN BANGLES",
+        "overlayText": "PLAIN BANGLES"
       }
     ]
   },
   "logs": [
+    {
+      "userId": "c1ffde2d-e336-438d-a7d7-9f9466a087d7",
+      "automationId": "f3931d92-98b1-4343-b139-4c5f9b42a84f",
+      "automationName": "Price Inquiry Automation",
+      "instagramAccountId": "2469eaf9-8c44-4075-987f-7cb91e459e76",
+      "instagramUserId": "test_user_77",
+      "username": "designer_pat",
+      "commentId": "mock_test_1790432311186",
+      "commentText": "What is the PRICE of this piece?",
+      "matchedKeyword": "PRICE",
+      "actionType": "public_reply",
+      "actionStatus": "success",
+      "metaResponse": {
+        "test_mode": true,
+        "action": "public_reply",
+        "comment_id": "mock_test_1790432311186",
+        "reply_body": "Price is $49",
+        "timestamp": "2026-09-26T14:18:32.134Z"
+      },
+      "isTestEvent": true,
+      "id": "9ef83c55-a000-4706-80f6-3358e3b8165c",
+      "createdAt": "2026-09-26T14:18:32.134Z"
+    },
+    {
+      "userId": "c1ffde2d-e336-438d-a7d7-9f9466a087d7",
+      "automationId": "c4d5a061-9789-4da2-bd70-5d43a35879fe",
+      "automationName": "Auto A Price",
+      "instagramAccountId": "2469eaf9-8c44-4075-987f-7cb91e459e76",
+      "instagramUserId": "user_multi_1",
+      "username": "multi_user",
+      "commentId": "multi_comment_1790432307559",
+      "commentText": "I need MULTI_MATCH_KEY right now",
+      "matchedKeyword": "MULTI_MATCH_KEY",
+      "actionType": "public_reply",
+      "actionStatus": "success",
+      "metaResponse": {
+        "test_mode": true,
+        "action": "public_reply",
+        "comment_id": "multi_comment_1790432307559",
+        "reply_body": "Reply A",
+        "timestamp": "2026-09-26T14:18:28.866Z"
+      },
+      "isTestEvent": true,
+      "id": "27d1868f-4917-4356-b7c2-ed03289ba476",
+      "createdAt": "2026-09-26T14:18:28.866Z"
+    },
+    {
+      "userId": "c1ffde2d-e336-438d-a7d7-9f9466a087d7",
+      "automationId": "c7182cd6-ff27-415c-afa1-d031610784b3",
+      "automationName": "Auto B Price",
+      "instagramAccountId": "2469eaf9-8c44-4075-987f-7cb91e459e76",
+      "instagramUserId": "user_multi_1",
+      "username": "multi_user",
+      "commentId": "multi_comment_1790432307559",
+      "commentText": "I need MULTI_MATCH_KEY right now",
+      "matchedKeyword": "MULTI_MATCH_KEY",
+      "actionType": "private_dm",
+      "actionStatus": "success",
+      "metaResponse": {
+        "test_mode": true,
+        "action": "private_dm",
+        "recipient_user_id": "user_multi_1",
+        "message_preview": "DM B",
+        "timestamp": "2026-09-26T14:18:28.650Z"
+      },
+      "isTestEvent": true,
+      "id": "a1694f2a-c472-4b79-b013-46b92076645f",
+      "createdAt": "2026-09-26T14:18:28.650Z"
+    },
+    {
+      "userId": "usr_default_01",
+      "instagramAccountId": "ig_acc_01",
+      "instagramUserId": "user_dup_1",
+      "username": "dup_user",
+      "commentId": "comment_idempotent_1790432304403",
+      "commentText": "PRICE please",
+      "actionType": "duplicate_ignored",
+      "actionStatus": "skipped",
+      "errorMessage": "Event already processed (Idempotency guard)",
+      "isTestEvent": false,
+      "id": "9b002575-8a9e-4ace-9566-c23bf91333b7",
+      "createdAt": "2026-09-26T14:18:26.401Z"
+    },
+    {
+      "userId": "c1ffde2d-e336-438d-a7d7-9f9466a087d7",
+      "instagramAccountId": "2469eaf9-8c44-4075-987f-7cb91e459e76",
+      "instagramUserId": "user_dup_1",
+      "username": "dup_user",
+      "commentId": "comment_idempotent_1790432304403",
+      "commentText": "PRICE please",
+      "actionType": "no_match",
+      "actionStatus": "skipped",
+      "errorMessage": "No active automations configured for this account",
+      "isTestEvent": false,
+      "id": "17a6fa32-b621-4b25-8983-cfa748caaa37",
+      "createdAt": "2026-09-26T14:18:25.926Z"
+    },
+    {
+      "userId": "c1ffde2d-e336-438d-a7d7-9f9466a087d7",
+      "instagramAccountId": "2469eaf9-8c44-4075-987f-7cb91e459e76",
+      "instagramUserId": "user_test_99",
+      "username": "tester",
+      "commentId": "comment_inactive_test_1790432301577",
+      "commentText": "Here is TEST_INACTIVE_KEYWORD for you",
+      "actionType": "no_match",
+      "actionStatus": "skipped",
+      "errorMessage": "No active automations configured for this account",
+      "isTestEvent": false,
+      "id": "bfc0df92-9161-4c19-acf4-fd8348279640",
+      "createdAt": "2026-09-26T14:18:22.966Z"
+    },
     {
       "userId": "c1ffde2d-e336-438d-a7d7-9f9466a087d7",
       "automationId": "794c9ec3-38aa-4d9d-affc-ff22b9e8fc3c",
