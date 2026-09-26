@@ -71,6 +71,17 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
   // Meta OAuth Guidance / Configuration Modal
   const [showMetaModal, setShowMetaModal] = useState(false);
 
+  // Meta Access Token Diagnostics State
+  const [isTestingToken, setIsTestingToken] = useState(false);
+  const [tokenTestResult, setTokenTestResult] = useState<any | null>(null);
+
+  // Live Media Sync & Reel Import State
+  const [isSyncingMedia, setIsSyncingMedia] = useState(false);
+  const [syncMediaStatus, setSyncMediaStatus] = useState<string | null>(null);
+  const [importReelUrl, setImportReelUrl] = useState('');
+  const [isImportingReel, setIsImportingReel] = useState(false);
+  const [importReelResult, setImportReelResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   const fetchAccounts = () => {
     ApiClient.getInstagramAccounts()
       .then((res) => {
@@ -268,6 +279,139 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
       });
     } finally {
       setIsSubmittingAccount(false);
+    }
+  };
+
+  const handleTestToken = async () => {
+    if (!inputAccessToken.trim()) {
+      setConnectResult({ type: 'error', text: 'Please enter your Meta Graph Access Token to test.' });
+      return;
+    }
+    setIsTestingToken(true);
+    setTokenTestResult(null);
+    try {
+      const res = await ApiClient.testMetaToken({
+        accessToken: inputAccessToken.trim(),
+        appId: inputAppId.trim() || undefined,
+        username: inputUsername.trim() || undefined,
+        instagramUserId: inputIgUserId.trim() || undefined,
+      });
+      setTokenTestResult(res);
+      if (res.account?.username) {
+        setInputUsername(res.account.username);
+      }
+      if (res.account?.id && !res.account.id.startsWith('ig_')) {
+        setInputIgUserId(res.account.id);
+      }
+    } catch (err: any) {
+      setTokenTestResult({
+        success: false,
+        isValid: false,
+        error: err.message || 'Failed to inspect token with Meta Graph API',
+        diagnostics: [`❌ Network/server error: ${err.message}`],
+      });
+    } finally {
+      setIsTestingToken(false);
+    }
+  };
+
+  const handleConnectWithTokenSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!inputAccessToken.trim()) {
+      setConnectResult({ type: 'error', text: 'Please enter your generated Meta Graph Access Token.' });
+      return;
+    }
+    setIsSubmittingAccount(true);
+    setConnectResult(null);
+    try {
+      const res = await ApiClient.connectInstagramWithToken({
+        accessToken: inputAccessToken.trim(),
+        appId: inputAppId.trim() || undefined,
+        username: inputUsername.trim() || 'thevelocityexports',
+        instagramUserId: inputIgUserId.trim() || undefined,
+      });
+
+      if (res.success && res.account) {
+        try {
+          localStorage.setItem('instaflow_connected_account', JSON.stringify(res.account));
+          localStorage.setItem('instaflow_active_account', JSON.stringify(res.account));
+          if (res.media && Array.isArray(res.media) && res.media.length > 0) {
+            localStorage.setItem('instaflow_active_reels', JSON.stringify(res.media));
+            localStorage.setItem(`instaflow_media_${res.account.username}`, JSON.stringify(res.media));
+          }
+        } catch {}
+
+        setConnectResult({
+          type: 'success',
+          text: `Account @${res.account.username} connected with Meta Access Token! ${res.mediaCount > 0 ? `Fetched ${res.mediaCount} live reels.` : 'Live webhook listener active.'}`,
+        });
+        onRefresh();
+        fetchAccounts();
+      } else {
+        setConnectResult({
+          type: 'error',
+          text: (res as any).error || res.message || 'Failed to connect with Access Token',
+        });
+      }
+    } catch (err: any) {
+      setConnectResult({ type: 'error', text: err.message || 'Failed to connect' });
+    } finally {
+      setIsSubmittingAccount(false);
+    }
+  };
+
+  const handleSyncMedia = async () => {
+    setIsSyncingMedia(true);
+    setSyncMediaStatus(null);
+    try {
+      const res = await ApiClient.getInstagramMedia(connectedAccount?.id);
+      if (res && res.media) {
+        setSyncMediaStatus(`✓ Synchronized ${res.media.length} reels & posts from Instagram!`);
+        try {
+          if (res.media.length > 0) {
+            localStorage.setItem('instaflow_active_reels', JSON.stringify(res.media));
+            if (connectedAccount?.username) {
+              localStorage.setItem(`instaflow_media_${connectedAccount.username}`, JSON.stringify(res.media));
+            }
+          }
+        } catch {}
+        onRefresh();
+      } else {
+        setSyncMediaStatus(res?.message || 'Sync completed.');
+      }
+    } catch (err: any) {
+      setSyncMediaStatus(`Sync notice: ${err?.message || 'Failed to sync'}`);
+    } finally {
+      setIsSyncingMedia(false);
+    }
+  };
+
+  const handleImportReel = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!importReelUrl.trim()) return;
+    setIsImportingReel(true);
+    setImportReelResult(null);
+    try {
+      const res = await ApiClient.importInstagramReel({ reelUrl: importReelUrl.trim() });
+      if (res.success) {
+        setImportReelResult({ type: 'success', text: `✓ Imported Reel from Instagram! Total reels: ${res.totalMedia}` });
+        setImportReelUrl('');
+        try {
+          if (res.media && res.media.length > 0) {
+            localStorage.setItem('instaflow_active_reels', JSON.stringify(res.media));
+            if (connectedAccount?.username) {
+              localStorage.setItem(`instaflow_media_${connectedAccount.username}`, JSON.stringify(res.media));
+            }
+          }
+        } catch {}
+        onRefresh();
+      } else {
+        setImportReelResult({ type: 'error', text: res.message || 'Failed to import reel' });
+      }
+    } catch (err: any) {
+      setImportReelResult({ type: 'error', text: err?.message || 'Failed to import reel' });
+    } finally {
+      setIsImportingReel(false);
     }
   };
 
@@ -546,40 +690,100 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
               </form>
             )}
 
-            {/* Permissions Granted & Data Sync Verification */}
+            {/* Connected State Account Health, Reels Sync, and Import Reel */}
             <div className="space-y-4 pt-2">
-              {/* Data Sync & Verification Confirmation Box */}
-              <div className="p-4 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              {/* Data Sync & Verification Status Box */}
+              <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                      <CheckCircle2 className="w-5 h-5" />
+                    </div>
                     <div>
-                      <h5 className="text-xs font-bold text-emerald-900">
-                        Instagram Account & Live Data Synchronization: Confirmed
+                      <h5 className="text-xs font-bold text-slate-900">
+                        Live Instagram Synchronization & Webhook Engine
                       </h5>
-                      <p className="text-[11px] text-emerald-700">
-                        All reels, media items, and comment webhook listeners are synced and ready for automations.
+                      <p className="text-[11px] text-slate-500">
+                        {connectedAccount.accessToken
+                          ? 'Meta Graph API token is linked. Live comments, DMs, and Reels are synchronized.'
+                          : 'Connected in Direct Mode. Add a Meta Graph token below or import reels by URL.'}
                       </p>
                     </div>
                   </div>
-                  <span className="px-2 py-0.5 bg-emerald-200 text-emerald-900 text-[10px] font-bold rounded-full uppercase">
-                    100% Synced
-                  </span>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={isSyncingMedia}
+                      onClick={handleSyncMedia}
+                      className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isSyncingMedia ? 'animate-spin' : ''}`} />
+                      <span>{isSyncingMedia ? 'Syncing...' : 'Sync Live Reels'}</span>
+                    </button>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                  <div className="p-2 bg-white/90 border border-emerald-200 rounded-lg flex items-center gap-2 text-emerald-900">
-                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 stroke-[3]" />
-                    <span className="font-semibold text-[11px]">Reels & Posts: Synced</span>
+                {syncMediaStatus && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 font-medium">
+                    {syncMediaStatus}
                   </div>
-                  <div className="p-2 bg-white/90 border border-emerald-200 rounded-lg flex items-center gap-2 text-emerald-900">
-                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 stroke-[3]" />
-                    <span className="font-semibold text-[11px]">Webhook: Active</span>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                    <span className="text-slate-600 font-medium">Meta Token</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${connectedAccount.accessToken ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'}`}>
+                      {connectedAccount.accessToken ? 'Active (v21.0)' : 'Not Linked'}
+                    </span>
                   </div>
-                  <div className="p-2 bg-white/90 border border-emerald-200 rounded-lg flex items-center gap-2 text-emerald-900">
-                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 stroke-[3]" />
-                    <span className="font-semibold text-[11px]">Auto-DM: Enabled</span>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                    <span className="text-slate-600 font-medium">Comment Listener</span>
+                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded text-[10px] font-bold">
+                      Active (12s Poller)
+                    </span>
                   </div>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                    <span className="text-slate-600 font-medium">Auto-DM Engine</span>
+                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded text-[10px] font-bold">
+                      Ready
+                    </span>
+                  </div>
+                </div>
+
+                {/* Import Real Instagram Reel Tool */}
+                <div className="pt-3 border-t border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                      Import Reel by URL directly to your account
+                    </label>
+                    <span className="text-[10px] text-slate-400">Paste any Instagram reel link</span>
+                  </div>
+                  
+                  {importReelResult && (
+                    <div className={`p-2.5 rounded-lg text-xs font-medium ${importReelResult.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'}`}>
+                      {importReelResult.text}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleImportReel} className="flex gap-2">
+                    <input
+                      type="url"
+                      value={importReelUrl}
+                      onChange={(e) => setImportReelUrl(e.target.value)}
+                      placeholder="https://www.instagram.com/reel/C8_example/ or post URL"
+                      className="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0066ff]"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isImportingReel || !importReelUrl.trim()}
+                      className="px-4 py-2 bg-[#0066ff] hover:bg-[#0052cc] text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      {isImportingReel ? 'Importing...' : 'Import Reel'}
+                    </button>
+                  </form>
                 </div>
               </div>
 
@@ -605,7 +809,7 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
             </div>
           </div>
         ) : (
-          /* Disconnected State: Clear Two Options */
+          /* Disconnected State */
           <div className="space-y-6">
             {/* Quick 1-Click Connect Banner for the User's Account */}
             <div className="p-4 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
@@ -617,7 +821,7 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
                   <h4 className="text-sm font-bold">Connect your account: @thevelocityexports</h4>
                 </div>
                 <p className="text-xs text-blue-100">
-                  Ready to link immediately. No Meta Developer app or approval needed.
+                  Ready to link immediately. Connect using App ID & Token or Direct Handle.
                 </p>
               </div>
 
@@ -625,24 +829,165 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
                 type="button"
                 disabled={isSubmittingAccount}
                 onClick={() => handleDirectConnectSubmit(undefined, 'thevelocityexports', 'Velocity Exports')}
-                className="px-4 py-2 bg-white hover:bg-blue-50 text-blue-700 rounded-xl text-xs font-bold shadow-xs shrink-0 flex items-center gap-2 transition-all self-start sm:self-auto"
+                className="px-4 py-2 bg-white hover:bg-blue-50 text-blue-700 rounded-xl text-xs font-bold shadow-xs shrink-0 flex items-center gap-2 transition-all self-start sm:self-auto cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5 text-blue-600" />
                 {isSubmittingAccount ? 'Connecting...' : 'Connect @thevelocityexports in 1-Click'}
               </button>
             </div>
 
+            {/* Primary Option: Connect with Meta App ID & Generated Access Token */}
+            <div className="p-6 bg-gradient-to-br from-amber-50/50 via-white to-orange-50/40 border-2 border-amber-300 rounded-2xl shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/70 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                    🔑
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900">
+                      Connect with Meta App ID & Generated Access Token
+                    </h4>
+                    <p className="text-xs text-slate-600">
+                      Connect using the token generated in Meta Developers (Graph API Explorer or Instagram Token Generator)
+                    </p>
+                  </div>
+                </div>
+                <span className="px-2.5 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold rounded-full uppercase self-start sm:self-auto">
+                  Meta Developers
+                </span>
+              </div>
+
+              {/* Diagnostic Test Output Panel */}
+              {tokenTestResult && (
+                <div className={`p-4 rounded-xl border text-xs space-y-2.5 ${tokenTestResult.isValid ? 'bg-emerald-50 text-emerald-900 border-emerald-200' : 'bg-rose-50 text-rose-900 border-rose-200'}`}>
+                  <div className="flex items-center justify-between font-bold">
+                    <div className="flex items-center gap-1.5">
+                      {tokenTestResult.isValid ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                      )}
+                      <span>
+                        {tokenTestResult.isValid
+                          ? `✓ Valid Meta ${tokenTestResult.type || 'Access'} Token`
+                          : `Meta Token Issue: ${tokenTestResult.error || 'Token verification failed'}`}
+                      </span>
+                    </div>
+                    {tokenTestResult.appId && (
+                      <span className="font-mono text-[10px] bg-white px-2 py-0.5 rounded border border-slate-200">
+                        App: {tokenTestResult.appId}
+                      </span>
+                    )}
+                  </div>
+
+                  {tokenTestResult.diagnostics && tokenTestResult.diagnostics.length > 0 && (
+                    <div className="space-y-1 font-mono text-[11px] bg-white/80 p-2.5 rounded-lg border border-slate-200/80">
+                      {tokenTestResult.diagnostics.map((diag: string, i: number) => (
+                        <div key={i}>{diag}</div>
+                      ))}
+                    </div>
+                  )}
+
+                  {tokenTestResult.account && (
+                    <div className="flex items-center gap-3 pt-1 text-slate-800">
+                      <span>Account: <strong>@{tokenTestResult.account.username}</strong></span>
+                      {tokenTestResult.account.id && <span>ID: <code className="font-mono text-[10px]">{tokenTestResult.account.id}</code></span>}
+                      <span>Media Items: <strong>{tokenTestResult.mediaCount}</strong></span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <form onSubmit={handleConnectWithTokenSubmit} className="space-y-3.5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Meta App ID
+                    </label>
+                    <input
+                      type="text"
+                      value={inputAppId}
+                      onChange={(e) => setInputAppId(e.target.value)}
+                      placeholder="1112277534589803"
+                      className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0066ff]"
+                    />
+                    <span className="text-[10px] text-slate-400 block mt-0.5">
+                      From developers.facebook.com → App Dashboard
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Instagram Username Handle *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-xs">@</span>
+                      <input
+                        type="text"
+                        value={inputUsername}
+                        onChange={(e) => setInputUsername(e.target.value)}
+                        placeholder="thevelocityexports"
+                        className="w-full pl-7 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0066ff]"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Generated Meta Graph Access Token *
+                    </label>
+                    <span className="text-[10px] text-slate-400">User, Page, or Instagram Graph Token</span>
+                  </div>
+                  <textarea
+                    rows={3}
+                    value={inputAccessToken}
+                    onChange={(e) => setInputAccessToken(e.target.value)}
+                    placeholder="Paste your generated token here (starts with EAA... or IGA...)"
+                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0066ff] resize-none"
+                    required
+                  />
+                  <span className="text-[10px] text-slate-500 block mt-0.5">
+                    Generate in Meta Developers → <strong>Graph API Explorer</strong> or <strong>Instagram Graph API → Generate Token</strong>.
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                  <button
+                    type="button"
+                    disabled={isTestingToken || !inputAccessToken.trim()}
+                    onClick={handleTestToken}
+                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isTestingToken ? 'animate-spin' : ''}`} />
+                    <span>{isTestingToken ? 'Testing with Meta...' : 'Test & Diagnose Token'}</span>
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmittingAccount || !inputAccessToken.trim()}
+                    className="px-6 py-2.5 bg-[#0066ff] hover:bg-[#0052cc] text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSubmittingAccount ? 'animate-spin' : ''}`} />
+                    <span>{isSubmittingAccount ? 'Connecting...' : 'Connect & Fetch Live Data →'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Option 1: Direct Instant Connect Form */}
+              {/* Option 2: Direct Instant Connect Form */}
               <div className="p-5 bg-gradient-to-br from-blue-50/70 to-indigo-50/50 border border-blue-200 rounded-2xl space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-lg bg-[#0066ff] text-white flex items-center justify-center font-bold text-xs shadow-xs">
-                      1
+                      2
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-slate-900">Instant Connect (Direct Handle)</h4>
-                      <p className="text-[11px] text-slate-500">Connect any handle directly with zero setup</p>
+                      <h4 className="text-xs font-bold text-slate-900">Direct Connect (Instant Handle)</h4>
+                      <p className="text-[11px] text-slate-500">Connect any handle directly without Meta keys</p>
                     </div>
                   </div>
                   <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded">Instant</span>
@@ -679,37 +1024,24 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                      Meta Graph Access Token (Optional — enables live Reels fetching)
-                    </label>
-                    <input
-                      type="password"
-                      value={inputAccessToken}
-                      onChange={(e) => setInputAccessToken(e.target.value)}
-                      placeholder="EAA... (from developers.facebook.com or Graph Explorer)"
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-[#0066ff] shadow-2xs"
-                    />
-                  </div>
-
                   <button
                     type="submit"
                     disabled={isSubmittingAccount || !inputUsername.trim()}
-                    className="w-full py-2.5 bg-[#0066ff] hover:bg-[#0052cc] disabled:bg-slate-300 text-white rounded-lg text-xs font-semibold shadow-2xs flex items-center justify-center gap-1.5 transition-colors"
+                    className="w-full py-2.5 bg-[#0066ff] hover:bg-[#0052cc] disabled:bg-slate-300 text-white rounded-lg text-xs font-semibold shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isSubmittingAccount ? 'animate-spin' : ''}`} />
-                    {isSubmittingAccount ? 'Connecting...' : 'Connect This Account'}
+                    {isSubmittingAccount ? 'Connecting...' : 'Connect Handle'}
                   </button>
                 </form>
               </div>
 
-              {/* Option 2: Manychat-Style Direct Instagram / Meta Login */}
+              {/* Option 3: Manychat-Style Direct Instagram / Meta Login */}
               <div className="p-5 bg-gradient-to-br from-purple-50/50 via-slate-50 to-pink-50/40 border border-slate-200 rounded-2xl flex flex-col justify-between space-y-4">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
-                        2
+                        3
                       </div>
                       <div>
                         <h4 className="text-xs font-bold text-slate-900">Instagram & Meta Login</h4>
@@ -717,42 +1049,31 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
                       </div>
                     </div>
                     <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded">
-                      Client-Friendly
+                      Popup Flow
                     </span>
                   </div>
                   <p className="text-xs text-slate-600 leading-relaxed pt-1">
-                    Your clients simply log in directly using their Instagram username / email & password inside the secure Instagram popup. No Meta developer keys required from them.
+                    Log in directly using your Instagram username / email & password inside the secure Instagram popup window.
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  {/* Primary: Direct Instagram Login (Manychat Screenshot 3 & 4) */}
                   <button
                     type="button"
                     onClick={handleDirectInstagramPopup}
-                    className="w-full py-2.5 bg-[#0066ff] hover:bg-[#0052cc] text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2"
+                    className="w-full py-2.5 bg-[#0066ff] hover:bg-[#0052cc] text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Instagram className="w-4 h-4" />
-                    Connect Via Instagram
+                    Connect Via Instagram Popup
                   </button>
 
-                  {/* Secondary: Connect Via Meta (Manychat Screenshot 2) */}
                   <button
                     type="button"
                     onClick={handleConnectClick}
-                    className="w-full py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-2 shadow-2xs"
+                    className="w-full py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-2 shadow-2xs cursor-pointer"
                   >
-                    Connect Via Meta (Facebook)
+                    Connect Via Meta (Facebook Login)
                   </button>
-
-                  {/* Meta Business Partner Banner (Screenshot 2) */}
-                  <div className="pt-2 flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-200/80">
-                    <span>InstaFlow Automation Engine</span>
-                    <span className="font-bold text-slate-800 flex items-center gap-1">
-                      <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                      Meta Graph API v21.0
-                    </span>
-                  </div>
                 </div>
               </div>
             </div>

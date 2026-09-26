@@ -50,6 +50,8 @@ export interface InstagramMediaItem {
   timestamp?: string;
   likeCount?: number;
   commentsCount?: number;
+  tag?: string;
+  overlayText?: string;
 }
 
 export interface AutomationActionConfig {

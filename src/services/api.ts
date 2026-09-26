@@ -210,7 +210,9 @@ export class ApiClient {
     name?: string;
     instagramUserId?: string;
     accessToken?: string;
-  }): Promise<{ success: boolean; account: InstagramAccount; message: string }> {
+    appId?: string;
+    appSecret?: string;
+  }): Promise<{ success: boolean; account: InstagramAccount; message: string; media?: InstagramMediaItem[] }> {
     try {
       return await this.request('/instagram/connect-account', {
         method: 'POST',
@@ -236,18 +238,80 @@ export class ApiClient {
     }
   }
 
+  static async testMetaToken(data: {
+    accessToken: string;
+    appId?: string;
+    appSecret?: string;
+    username?: string;
+    instagramUserId?: string;
+  }): Promise<{
+    success: boolean;
+    isValid: boolean;
+    type?: string;
+    appId?: string;
+    userId?: string;
+    scopes: string[];
+    expiresAt?: string;
+    account?: any;
+    mediaCount: number;
+    media: InstagramMediaItem[];
+    error?: string;
+    diagnostics: string[];
+  }> {
+    return this.request('/instagram/test-token', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   static async connectInstagramWithToken(data: {
     accessToken: string;
     instagramUserId?: string;
     username?: string;
+    appId?: string;
+    appSecret?: string;
   }): Promise<{
     success: boolean;
     account: InstagramAccount;
     media?: InstagramMediaItem[];
     mediaCount: number;
     message: string;
+    metaError?: string;
   }> {
     return this.request('/instagram/connect-token', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  static async importInstagramReel(data: {
+    reelUrl: string;
+    caption?: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    reel: InstagramMediaItem;
+    totalMedia: number;
+    media: InstagramMediaItem[];
+  }> {
+    return this.request('/instagram/import-reel', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  static async addCustomReel(data: {
+    reelUrl?: string;
+    caption?: string;
+    thumbnailUrl?: string;
+    mediaUrl?: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    reel: InstagramMediaItem;
+    totalMedia: number;
+  }> {
+    return this.request('/instagram/custom-media', {
       method: 'POST',
       body: JSON.stringify(data),
     });

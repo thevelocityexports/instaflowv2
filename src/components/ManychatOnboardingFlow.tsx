@@ -44,10 +44,49 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
   const [loginError, setLoginError] = useState<string | null>(null);
 
   // Meta Developer Tester Access Token Input State
+  const [tokenAppId, setTokenAppId] = useState('1112277534589803');
   const [tokenInput, setTokenInput] = useState('');
-  const [tokenInstagramId, setTokenInstagramId] = useState('17841433664757597');
-  const [tokenUsername, setTokenUsername] = useState('panchalohajewels');
+  const [tokenInstagramId, setTokenInstagramId] = useState('');
+  const [tokenUsername, setTokenUsername] = useState(currentConnectedAccount?.username || 'thevelocityexports');
   const [tokenError, setTokenError] = useState<string | null>(null);
+  const [tokenDiagnostics, setTokenDiagnostics] = useState<string[]>([]);
+  const [isDiagnosingToken, setIsDiagnosingToken] = useState(false);
+
+  // Diagnose Token
+  const handleDiagnoseToken = async () => {
+    if (!tokenInput.trim()) {
+      setTokenError('Please paste your Meta Graph Access Token first.');
+      return;
+    }
+    setTokenError(null);
+    setIsDiagnosingToken(true);
+    setTokenDiagnostics([]);
+
+    try {
+      const res = await ApiClient.testMetaToken({
+        accessToken: tokenInput.trim(),
+        appId: tokenAppId.trim() || undefined,
+        username: tokenUsername.trim() || undefined,
+        instagramUserId: tokenInstagramId.trim() || undefined,
+      });
+
+      if (res.account?.username) {
+        setTokenUsername(res.account.username);
+      }
+      if (res.account?.id && !res.account.id.startsWith('ig_')) {
+        setTokenInstagramId(res.account.id);
+      }
+
+      setTokenDiagnostics(res.diagnostics || []);
+      if (!res.isValid && res.error) {
+        setTokenError(res.error);
+      }
+    } catch (err: any) {
+      setTokenError(err.message || 'Failed to inspect token with Meta Graph API.');
+    } finally {
+      setIsDiagnosingToken(false);
+    }
+  };
 
   // Submit Access Token Direct Connect
   const handleConnectWithToken = async (e: React.FormEvent) => {
@@ -63,8 +102,9 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
     try {
       const res = await ApiClient.connectInstagramWithToken({
         accessToken: tokenInput.trim(),
+        appId: tokenAppId.trim() || undefined,
         instagramUserId: tokenInstagramId.trim() || undefined,
-        username: tokenUsername.trim() || 'panchalohajewels',
+        username: tokenUsername.trim() || 'thevelocityexports',
       });
 
       if (res.success && res.account) {
@@ -465,14 +505,14 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
                   </span>
                 </div>
                 <p className="text-[11px] text-amber-900 leading-snug">
-                  Already generated an Access Token in Meta Developers for <b>@panchalohajewels</b>? Paste it here to fetch your real live profile photo and reels immediately!
+                  Already generated an Access Token in Meta Developers for <b>@{tokenUsername || 'thevelocityexports'}</b>? Paste it here along with your App ID to fetch your real live profile photo and reels immediately!
                 </p>
                 <button
                   type="button"
                   onClick={() => setActivePopup('token_input')}
                   className="w-full py-2 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <span>Paste Access Token & Connect</span>
+                  <span>Paste App ID & Access Token</span>
                   <span>→</span>
                 </button>
               </div>
@@ -795,12 +835,44 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
               </div>
 
               {tokenError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-medium">
-                  {tokenError}
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-medium space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>Connection Notice</span>
+                  </div>
+                  <p>{tokenError}</p>
+                </div>
+              )}
+
+              {tokenDiagnostics && tokenDiagnostics.length > 0 && (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs">
+                  <div className="font-bold text-slate-700">Meta Diagnostics:</div>
+                  <div className="space-y-1 font-mono text-[11px] text-slate-600">
+                    {tokenDiagnostics.map((line, idx) => (
+                      <div key={idx}>{line}</div>
+                    ))}
+                  </div>
                 </div>
               )}
 
               <form onSubmit={handleConnectWithToken} className="space-y-3.5">
+                {/* Meta App ID */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Meta App ID
+                  </label>
+                  <input
+                    type="text"
+                    value={tokenAppId}
+                    onChange={(e) => setTokenAppId(e.target.value)}
+                    placeholder="1112277534589803"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:border-[#0066ff] focus:bg-white transition-all shadow-2xs"
+                  />
+                  <span className="text-[10px] text-slate-400 block mt-0.5">
+                    Found in Meta Developers App Dashboard
+                  </span>
+                </div>
+
                 {/* Access Token Textarea */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -815,25 +887,12 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
                     required
                   />
                   <span className="text-[10px] text-slate-400 block mt-0.5">
-                    Copy from your Meta Developer Portal under "2. Generate token"
+                    Copy from your Meta Developer Portal under "2. Generate token" or Graph API Explorer
                   </span>
                 </div>
 
                 {/* Account Details */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Instagram Account ID
-                    </label>
-                    <input
-                      type="text"
-                      value={tokenInstagramId}
-                      onChange={(e) => setTokenInstagramId(e.target.value)}
-                      placeholder="17841433664757597"
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:border-[#0066ff] focus:bg-white transition-all shadow-2xs"
-                    />
-                  </div>
-
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
                       Username Handle
@@ -842,25 +901,49 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
                       type="text"
                       value={tokenUsername}
                       onChange={(e) => setTokenUsername(e.target.value)}
-                      placeholder="panchalohajewels"
+                      placeholder="thevelocityexports"
                       className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-[#0066ff] focus:bg-white transition-all shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Instagram ID (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={tokenInstagramId}
+                      onChange={(e) => setTokenInstagramId(e.target.value)}
+                      placeholder="Auto-detected if empty"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:border-[#0066ff] focus:bg-white transition-all shadow-2xs"
                     />
                   </div>
                 </div>
 
-                {/* Submit button */}
-                <div className="pt-2 flex items-center gap-2">
+                {/* Test button & Submit button */}
+                <div className="pt-2 flex flex-col sm:flex-row items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isDiagnosingToken || !tokenInput.trim()}
+                    onClick={handleDiagnoseToken}
+                    className="w-full sm:w-auto px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isDiagnosingToken ? 'animate-spin' : ''}`} />
+                    <span>{isDiagnosingToken ? 'Testing...' : 'Test Token'}</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => setActivePopup('none')}
-                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                    className="w-full sm:w-auto px-3.5 py-2.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
                   >
                     Cancel
                   </button>
+
                   <button
                     type="submit"
                     disabled={isProcessingLogin || !tokenInput.trim()}
-                    className="flex-1 py-2.5 bg-[#0066ff] hover:bg-[#0052cc] disabled:bg-slate-300 text-white rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="w-full sm:flex-1 py-2.5 bg-[#0066ff] hover:bg-[#0052cc] disabled:bg-slate-300 text-white rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     {isProcessingLogin ? (
                       <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />

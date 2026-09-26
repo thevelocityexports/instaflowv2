@@ -5,14 +5,7 @@
       "email": "thevelocityexports@gmail.com",
       "fullName": "Velocity Exports Admin",
       "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80",
-      "createdAt": "2026-09-25T15:18:55.690Z"
-    },
-    {
-      "id": "74b77ad6-b928-4404-9898-be81d6971ee7",
-      "email": "thevelocityexports@gmail.com",
-      "fullName": "Velocity Exports Admin",
-      "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80",
-      "createdAt": "2026-09-25T15:18:55.690Z"
+      "createdAt": "2026-09-26T06:14:08.834Z"
     },
     {
       "id": "9a419b75-cb04-49f9-a69b-b7d1a8e88a5d",
@@ -20,30 +13,27 @@
       "fullName": "Dineshgadagi84",
       "avatarUrl": "https://api.dicebear.com/7.x/initials/svg?seed=dineshgadagi84",
       "createdAt": "2026-09-25T15:19:18.457Z"
+    },
+    {
+      "id": "74b77ad6-b928-4404-9898-be81d6971ee7",
+      "email": "thevelocityexports@gmail.com",
+      "fullName": "Velocity Exports Admin",
+      "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80",
+      "createdAt": "2026-09-26T06:14:08.834Z"
     }
   ],
   "accounts": [
     {
-      "id": "acc_1790337166414",
-      "userId": "usr_default_01",
-      "instagramUserId": "ig_panchalohajewels",
-      "username": "panchalohajewels",
-      "name": "Panchaloha Jewels",
-      "isConnected": true,
-      "connectedAt": "2026-09-25T11:52:46.414Z",
-      "updatedAt": "2026-09-25T11:52:46.414Z"
-    },
-    {
       "id": "940d8dbd-4189-4239-8594-e72fa1c1c19e",
-      "userId": "9a419b75-cb04-49f9-a69b-b7d1a8e88a5d",
+      "userId": "74b77ad6-b928-4404-9898-be81d6971ee7",
       "instagramUserId": "ig_thevelocityexports",
       "username": "thevelocityexports",
       "name": "Velocity Exports",
-      "profilePictureUrl": null,
+      "profilePictureUrl": "https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=200&q=80",
       "accessToken": null,
       "isConnected": true,
       "connectedAt": "2026-09-25T14:52:33.929343+00:00",
-      "updatedAt": "2026-09-25T14:52:33.445+00:00"
+      "updatedAt": "2026-09-26T06:14:13.825Z"
     }
   ],
   "automations": [
@@ -75,7 +65,132 @@
       "lastActivityAt": "2026-09-25T14:56:51.893Z"
     }
   ],
-  "cachedMedia": {},
+  "cachedMedia": {
+    "thevelocityexports": [
+      {
+        "id": "reel_thevelocityexports_01",
+        "caption": "@thevelocityexports 📦 New Export Consignment dispatched to North America & Europe! Premium Grade Quality Guaranteed. ✈️ Comment CATALOG or PRICE to get our full product catalog and FOB price sheet!",
+        "mediaType": "VIDEO",
+        "mediaProductType": "REELS",
+        "isReel": true,
+        "thumbnailUrl": "https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=600&q=80",
+        "mediaUrl": "https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=600&q=80",
+        "permalink": "https://www.instagram.com/thevelocityexports/reel/export_consignment_01/",
+        "timestamp": "2026-09-26T04:14:13.825Z",
+        "likeCount": 142,
+        "commentsCount": 18,
+        "tag": "EXPORT CARGO",
+        "overlayText": "GLOBAL SHIPMENT"
+      },
+      {
+        "id": "reel_thevelocityexports_02",
+        "caption": "@thevelocityexports 🚢 Port Loading & Container Clearance Completed. Fast worldwide shipping with full tracking. Comment SHIP to get container status & shipping schedules!",
+        "mediaType": "VIDEO",
+        "mediaProductType": "REELS",
+        "isReel": true,
+        "thumbnailUrl": "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80",
+        "mediaUrl": "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80",
+        "permalink": "https://www.instagram.com/thevelocityexports/reel/container_loading_02/",
+        "timestamp": "2026-09-25T06:14:13.825Z",
+        "likeCount": 215,
+        "commentsCount": 24,
+        "tag": "CONTAINER LOGISTICS",
+        "overlayText": "PORT DISPATCH"
+      },
+      {
+        "id": "reel_thevelocityexports_03",
+        "caption": "@thevelocityexports ⚙️ Factory Floor Quality Check & Packaging Line. Certified standards for global export markets. Comment DETAILS for minimum order quantities and bulk pricing!",
+        "mediaType": "VIDEO",
+        "mediaProductType": "REELS",
+        "isReel": true,
+        "thumbnailUrl": "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=80",
+        "mediaUrl": "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=80",
+        "permalink": "https://www.instagram.com/thevelocityexports/reel/factory_check_03/",
+        "timestamp": "2026-09-24T06:14:13.825Z",
+        "likeCount": 389,
+        "commentsCount": 31,
+        "tag": "QUALITY CHECK",
+        "overlayText": "FACTORY INSPECTION"
+      },
+      {
+        "id": "reel_thevelocityexports_04",
+        "caption": "@thevelocityexports 🌐 Velocity Exports Global Trade Network. Partnering with distributors across 35+ countries. Comment CONNECT to speak with our international trade manager!",
+        "mediaType": "VIDEO",
+        "mediaProductType": "REELS",
+        "isReel": true,
+        "thumbnailUrl": "https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=600&q=80",
+        "mediaUrl": "https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=600&q=80",
+        "permalink": "https://www.instagram.com/thevelocityexports/reel/global_trade_04/",
+        "timestamp": "2026-09-23T06:14:13.825Z",
+        "likeCount": 460,
+        "commentsCount": 42,
+        "tag": "GLOBAL TRADE",
+        "overlayText": "WORLDWIDE EXPORTS"
+      }
+    ],
+    "940d8dbd-4189-4239-8594-e72fa1c1c19e": [
+      {
+        "id": "reel_thevelocityexports_01",
+        "caption": "@thevelocityexports 📦 New Export Consignment dispatched to North America & Europe! Premium Grade Quality Guaranteed. ✈️ Comment CATALOG or PRICE to get our full product catalog and FOB price sheet!",
+        "mediaType": "VIDEO",
+        "mediaProductType": "REELS",
+        "isReel": true,
+        "thumbnailUrl": "https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=600&q=80",
+        "mediaUrl": "https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=600&q=80",
+        "permalink": "https://www.instagram.com/thevelocityexports/reel/export_consignment_01/",
+        "timestamp": "2026-09-26T04:14:13.825Z",
+        "likeCount": 142,
+        "commentsCount": 18,
+        "tag": "EXPORT CARGO",
+        "overlayText": "GLOBAL SHIPMENT"
+      },
+      {
+        "id": "reel_thevelocityexports_02",
+        "caption": "@thevelocityexports 🚢 Port Loading & Container Clearance Completed. Fast worldwide shipping with full tracking. Comment SHIP to get container status & shipping schedules!",
+        "mediaType": "VIDEO",
+        "mediaProductType": "REELS",
+        "isReel": true,
+        "thumbnailUrl": "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80",
+        "mediaUrl": "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80",
+        "permalink": "https://www.instagram.com/thevelocityexports/reel/container_loading_02/",
+        "timestamp": "2026-09-25T06:14:13.825Z",
+        "likeCount": 215,
+        "commentsCount": 24,
+        "tag": "CONTAINER LOGISTICS",
+        "overlayText": "PORT DISPATCH"
+      },
+      {
+        "id": "reel_thevelocityexports_03",
+        "caption": "@thevelocityexports ⚙️ Factory Floor Quality Check & Packaging Line. Certified standards for global export markets. Comment DETAILS for minimum order quantities and bulk pricing!",
+        "mediaType": "VIDEO",
+        "mediaProductType": "REELS",
+        "isReel": true,
+        "thumbnailUrl": "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=80",
+        "mediaUrl": "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=80",
+        "permalink": "https://www.instagram.com/thevelocityexports/reel/factory_check_03/",
+        "timestamp": "2026-09-24T06:14:13.825Z",
+        "likeCount": 389,
+        "commentsCount": 31,
+        "tag": "QUALITY CHECK",
+        "overlayText": "FACTORY INSPECTION"
+      },
+      {
+        "id": "reel_thevelocityexports_04",
+        "caption": "@thevelocityexports 🌐 Velocity Exports Global Trade Network. Partnering with distributors across 35+ countries. Comment CONNECT to speak with our international trade manager!",
+        "mediaType": "VIDEO",
+        "mediaProductType": "REELS",
+        "isReel": true,
+        "thumbnailUrl": "https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=600&q=80",
+        "mediaUrl": "https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=600&q=80",
+        "permalink": "https://www.instagram.com/thevelocityexports/reel/global_trade_04/",
+        "timestamp": "2026-09-23T06:14:13.825Z",
+        "likeCount": 460,
+        "commentsCount": 42,
+        "tag": "GLOBAL TRADE",
+        "overlayText": "WORLDWIDE EXPORTS"
+      }
+    ]
+  },
   "logs": [
     {
       "userId": "usr_default_01",

@@ -58,11 +58,11 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const activeUsername =
     connectedAccount?.username ||
     connectedAccountUsername ||
-    'panchalohajewels';
+    'thevelocityexports';
 
   const activeName =
     connectedAccount?.name ||
-    'Panchaloha Jewellers';
+    'Velocity Exports';
 
   // Name
   const [name, setName] = useState(
@@ -83,6 +83,9 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [isLoadingMedia, setIsLoadingMedia] = useState(false);
   const [showAllModal, setShowAllModal] = useState(false);
   const [searchReelTerm, setSearchReelTerm] = useState('');
+  const [importReelUrl, setImportReelUrl] = useState('');
+  const [isImportingReel, setIsImportingReel] = useState(false);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
 
   // Step 1: When someone comments on
   const [targetPostType, setTargetPostType] = useState<'specific' | 'all' | 'next'>(
@@ -97,7 +100,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [keywords, setKeywords] = useState<string[]>(
     initialData?.keywords && initialData.keywords.length > 0 && initialData.keywords[0] !== '*'
       ? initialData.keywords
-      : ['Price', 'Link', 'Shop', 'Cost', 'Order']
+      : ['Catalog', 'Price', 'FOB', 'MOQ', 'Export', 'Order']
   );
   const [keywordInput, setKeywordInput] = useState('');
 
@@ -107,28 +110,28 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     existingPublicReply ? existingPublicReply.isEnabled : false
   );
   const [publicReplyText, setPublicReplyText] = useState(
-    existingPublicReply?.messageTemplate || 'Thanks for your interest! 👋 Sent details directly to your DM.'
+    existingPublicReply?.messageTemplate || 'Thanks for reaching out! 👋 We just sent our export catalog and FOB price sheet to your DM ✈️'
   );
 
   // Step 4: "They will get"
   const existingPrivateDM = initialData?.actions?.find((a) => a.actionType === 'private_dm');
   const [enableOpeningDM, setEnableOpeningDM] = useState(true);
   const [openingDMText, setOpeningDMText] = useState(
-    "Hey there! Thanks so much for reaching out 😊\n\nClick below to access the full details and link ✨"
+    "Hello! Welcome to Velocity Exports 🚢\n\nClick below to download our international export catalog and current container FOB pricing ✨"
   );
-  const [openingDMButtonText, setOpeningDMButtonText] = useState('Send me the link');
+  const [openingDMButtonText, setOpeningDMButtonText] = useState('Download Catalog');
 
   // Step 5: "And then, they will get"
   const [enableLinkDM, setEnableLinkDM] = useState(true);
   const [linkDMText, setLinkDMText] = useState(
     existingPrivateDM?.messageTemplate ||
-      `✨ **Panchaloha Festive Jewellery** ✨\n\nElegant Traditional Panchaloha Collection with handcrafted finish, perfect for festive wear and auspicious moments. 💛✨\n\n📦 **Available for Order**\n💬 Reply **'ORDER'** to know the price and details.\n🛍️ Check the link below to order online:\n\n📞 **For Orders & Enquiries:**\n9642064207`
+      `📦 **Velocity Exports Global Catalog & FOB Pricing** ✈️\n\nThank you for your interest! We deliver certified high-grade export consignments worldwide with complete customs clearance and port tracking.\n\n🌐 **Product Catalog & Minimum Order Quantities:**\nClick below to access our full specifications and shipping schedules.\n\n📞 **International Trade Desk:**\nexport@thevelocityexports.com`
   );
   const [linkButtonText, setLinkButtonText] = useState(
-    existingPrivateDM?.linkButtonText || 'Order Now'
+    existingPrivateDM?.linkButtonText || 'View Product Catalog'
   );
   const [linkUrl, setLinkUrl] = useState(
-    existingPrivateDM?.linkUrl || 'https://example.com/festive-collection'
+    existingPrivateDM?.linkUrl || 'https://thevelocityexports.com/catalog'
   );
   const [followUpIfNotClicked, setFollowUpIfNotClicked] = useState(false);
 
@@ -199,7 +202,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     (selectedPostId && initialData?.targetPostId && selectedPostId === initialData.targetPostId && initialData.targetPostCaption) ||
     selectedItem?.caption ||
     initialData?.targetPostCaption ||
-    `${activeUsername} ✨ THIS FESTIVAL SEASON, CELEBRATE WITH TIMELESS TRADITION! ✨ Celebrate every special occasion with the elegance of a beautiful Mangalsutra & Panchaloha collection. 💛 A symbol of tradition, love and timeless beauty. 📞 96420 64207`;
+    `@${activeUsername} 📦 New Export Consignment dispatched to North America & Europe! Premium Grade Quality Guaranteed. ✈️ Comment CATALOG or PRICE to get our full product catalog and FOB price sheet!`;
 
   const handleSelectReel = (item: InstagramMediaItem) => {
     setTargetPostType('specific');
@@ -382,10 +385,10 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   {liveMedia.slice(0, 4).map((item, idx) => {
                     const isSelected = selectedPostId === item.id;
                     const fallbackTitles = [
-                      'PANCHALOHA SUTRALU',
-                      'PAIR BANGLES',
-                      'FESTIVE OFFER',
-                      '10% DISCOUNT',
+                      'GLOBAL SHIPMENT',
+                      'PORT DISPATCH',
+                      'FACTORY CHECK',
+                      'WORLDWIDE TRADE',
                     ];
                     const overlay = (item as any).overlayText || fallbackTitles[idx] || 'REEL';
 
@@ -404,10 +407,10 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                           alt={item.caption || 'Instagram Reel'}
                           onError={(e) => {
                             const fallbacks = [
-                              'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=600&q=80',
-                              'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=600&q=80',
-                              'https://images.unsplash.com/photo-1601121141461-9d6647bca1ed?auto=format&fit=crop&w=600&q=80',
-                              'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=600&q=80',
+                              'https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=600&q=80',
+                              'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80',
+                              'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=80',
+                              'https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=600&q=80',
                             ];
                             e.currentTarget.src = fallbacks[idx % fallbacks.length];
                           }}
@@ -424,18 +427,63 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
                   })}
                 </div>
 
-                {/* Show All blue link (Matching Screenshot 2) */}
-                <div className="mt-2.5">
+                {/* Show All & Quick Import Reel */}
+                <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-2">
                   <button
                     type="button"
                     onClick={() => setShowAllModal(true)}
-                    className="text-xs font-semibold text-[#0066ff] hover:underline flex items-center gap-1"
+                    className="text-xs font-semibold text-[#0066ff] hover:underline flex items-center gap-1 cursor-pointer"
                   >
                     <span>Show All</span>
                     <span className="text-[10px] text-slate-400 font-normal">
                       ({liveMedia.length} reels from @{activeUsername})
                     </span>
                   </button>
+
+                  <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Live Reel Sync Active</span>
+                  </div>
+                </div>
+
+                {/* Optional Import by Reel Link */}
+                <div className="mt-2 pt-2 border-t border-slate-100/80">
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={importReelUrl}
+                      onChange={(e) => setImportReelUrl(e.target.value)}
+                      placeholder="Paste Reel URL (e.g. instagram.com/reel/...)"
+                      className="flex-1 px-2.5 py-1 text-[11px] border border-slate-200 rounded-md focus:outline-none focus:border-[#0066ff]"
+                    />
+                    <button
+                      type="button"
+                      disabled={isImportingReel || !importReelUrl.trim()}
+                      onClick={async () => {
+                        if (!importReelUrl.trim()) return;
+                        setIsImportingReel(true);
+                        setImportNotice(null);
+                        try {
+                          const res = await ApiClient.importInstagramReel({ reelUrl: importReelUrl.trim() });
+                          if (res.success && res.reel) {
+                            setImportNotice(`✓ Imported Reel`);
+                            setImportReelUrl('');
+                            setLiveMedia((prev) => [res.reel, ...prev.filter((p) => p.id !== res.reel.id)]);
+                            setSelectedPostId(res.reel.id);
+                            setTargetPostType('specific');
+                          }
+                        } catch (err: any) {
+                          setImportNotice(err?.message || 'Error');
+                        } finally {
+                          setIsImportingReel(false);
+                        }
+                      }}
+                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 text-[11px] font-semibold rounded-md transition-colors cursor-pointer"
+                    >
+                      {isImportingReel ? '...' : '+ Import'}
+                    </button>
+                  </div>
+                  {importNotice && <p className="text-[10px] text-emerald-600 mt-1 font-medium">{importNotice}</p>}
                 </div>
               </div>
             </div>
