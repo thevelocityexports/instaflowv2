@@ -142,6 +142,34 @@ router.post('/sync-comments', async (req: AuthenticatedRequest, res: Response): 
 });
 
 /**
+ * Helper to escape HTML characters for safe diagnostic reporting
+ */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+/**
+ * Helper to parse cookies from incoming request headers
+ */
+function parseCookies(cookieHeader?: string): Record<string, string> {
+  const list: Record<string, string> = {};
+  if (!cookieHeader) return list;
+  cookieHeader.split(';').forEach((cookie) => {
+    const parts = cookie.split('=');
+    const name = parts.shift()?.trim();
+    if (name) {
+      list[name] = decodeURIComponent(parts.join('=')?.trim() || '');
+    }
+  });
+  return list;
+}
+
+/**
  * GET /api/instagram/connect
  * Initiates Direct Instagram Login Flow (Customer-facing Connect Instagram)
  */
@@ -149,11 +177,22 @@ router.get('/connect', async (req, res): Promise<void> => {
   try {
     const user = await AuthService.resolveUser(req);
     const userId = user ? user.id : 'usr_default_01';
-    const { url, isConfigured } = InstagramService.getInstagramDirectLoginUrl(userId);
+    const { url, isConfigured, state } = InstagramService.getInstagramDirectLoginUrl(userId);
 
     if (!isConfigured) {
       res.redirect('/?tab=instagram&meta_error=missing_credentials');
       return;
+    }
+
+    // Set secure HttpOnly cookie for stateless OAuth CSRF verification on Vercel
+    if (state) {
+      res.cookie('ig_oauth_state', state, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 15 * 60 * 1000,
+      });
     }
 
     res.redirect(url);
@@ -171,11 +210,22 @@ router.get('/connect-ig', async (req, res): Promise<void> => {
   try {
     const user = await AuthService.resolveUser(req);
     const userId = user ? user.id : 'usr_default_01';
-    const { url, isConfigured } = InstagramService.getInstagramDirectLoginUrl(userId);
+    const { url, isConfigured, state } = InstagramService.getInstagramDirectLoginUrl(userId);
 
     if (!isConfigured) {
       res.redirect('/?tab=instagram&meta_error=missing_credentials');
       return;
+    }
+
+    // Set secure HttpOnly cookie for stateless OAuth CSRF verification on Vercel
+    if (state) {
+      res.cookie('ig_oauth_state', state, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 15 * 60 * 1000,
+      });
     }
 
     res.redirect(url);
@@ -187,127 +237,636 @@ router.get('/connect-ig', async (req, res): Promise<void> => {
 
 /**
  * GET /api/instagram/callback
- * Handles OAuth redirect from Meta / Instagram Login
- * Validates CSRF state and fetches profile using graph.instagram.com
+ * TEMPORARY Instagram OAuth diagnostic mode for deployed Vercel application.
+ * Verifies that Meta successfully completes OAuth authorization and redirects back to production.
+ * DOES NOT exchange code for tokens.
+ * DOES NOT require META_APP_SECRET.
+ * DOES NOT expose or log raw authorization codes or secrets.
  */
 router.get('/callback', async (req, res): Promise<void> => {
-  const { code, state, error, error_description } = req.query;
+  const { code, state, error, error_reason, error_description } = req.query;
+  const currentUtcTimestamp = new Date().toUTCString();
+  const productionCallbackUrl = 'https://instaflowv2.vercel.app/api/instagram/callback';
 
-  if (error) {
-    LoggingService.error(`Meta OAuth callback returned error: ${error}`, error_description);
-    res.redirect(`/?tab=instagram&error=${encodeURIComponent(String(error_description || error))}`);
-    return;
-  }
+  // 1. Handle error response returned by Meta
+  if (error || error_reason || error_description) {
+    LoggingService.warn('Meta OAuth callback returned error');
+    const errorTitle = 'Instagram OAuth Authorization Failed';
+    const errorSubtitle = 'Meta returned an error during the OAuth authorization flow.';
+    
+    const errName = String(error || 'unspecified_error');
+    const errReason = String(error_reason || 'N/A');
+    const errDesc = String(error_description || 'No description provided by Meta.');
 
-  // Security: CSRF state validation
-  if (!state || typeof state !== 'string') {
-    LoggingService.error('Meta OAuth callback missing CSRF state parameter');
-    res.redirect('/?tab=instagram&error=Security+validation+failed:+Missing+OAuth+state');
-    return;
-  }
-
-  const stateValidation = InstagramService.validateAndConsumeOAuthState(state);
-  if (!stateValidation.isValid) {
-    LoggingService.error('Meta OAuth callback invalid or expired CSRF state');
-    res.redirect('/?tab=instagram&error=Security+validation+failed:+Invalid+or+expired+OAuth+session');
-    return;
-  }
-
-  if (!code || typeof code !== 'string') {
-    res.redirect('/?tab=instagram&error=Missing+authorization+code+from+Meta');
-    return;
-  }
-
-  try {
-    const tokenResult = await InstagramService.exchangeCodeForToken(code);
-
-    if (tokenResult.error || !tokenResult.accessToken) {
-      res.redirect(`/?tab=instagram&error=${encodeURIComponent(tokenResult.error || 'Token exchange failed')}`);
-      return;
-    }
-
-    const accessToken = tokenResult.accessToken;
-    let igUsername = 'connected_user';
-    let igName = 'Instagram Account';
-    let igUserId = `ig_${Date.now()}`;
-    let igAccountType: string | undefined = undefined;
-
-    // Profile lookup using official Instagram API (graph.instagram.com), NOT graph.facebook.com
-    try {
-      const igCandidateUrls = [
-        `https://graph.instagram.com/v21.0/me?fields=id,username,account_type&access_token=${encodeURIComponent(accessToken)}`,
-        `https://graph.instagram.com/me?fields=id,username,account_type&access_token=${encodeURIComponent(accessToken)}`,
-      ];
-
-      for (const igUrl of igCandidateUrls) {
-        const meRes = await fetch(igUrl);
-        if (meRes.ok) {
-          const meData = await meRes.json();
-          if (meData?.id) igUserId = meData.id;
-          if (meData?.username) {
-            igUsername = meData.username;
-            igName = `@${meData.username}`;
-          }
-          if (meData?.account_type) {
-            igAccountType = meData.account_type;
-          }
-          break;
-        }
-      }
-    } catch (e: any) {
-      LoggingService.warn('Could not query Instagram /me endpoint for profile metadata', e?.message);
-    }
-
-    const userId = stateValidation.userId || 'usr_default_01';
-    const savedAccount = await databaseService.upsertInstagramAccount(userId, {
-      username: igUsername,
-      name: igName,
-      instagramUserId: igUserId,
-      accessToken,
-    });
-
-    // Sanitized account payload for client-side postMessage (NEVER expose accessToken)
-    const sanitizedAccount = {
-      id: savedAccount.id,
-      userId: savedAccount.userId,
-      instagramUserId: savedAccount.instagramUserId,
-      username: savedAccount.username,
-      name: savedAccount.name,
-      profilePictureUrl: savedAccount.profilePictureUrl,
-      accountType: igAccountType,
-      isConnected: savedAccount.isConnected,
-      connectedAt: savedAccount.connectedAt,
-      updatedAt: savedAccount.updatedAt,
-    };
-
-    // Return popup close script with postMessage (for smooth popup flow)
-    const htmlResponse = `
+    const errorHtml = `
       <!DOCTYPE html>
-      <html>
-        <head><title>Instagram Connected</title></head>
-        <body style="font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f9fafb;">
-          <div style="text-align: center; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-            <div style="font-size: 40px; margin-bottom: 12px;">✅</div>
-            <h2 style="margin: 0 0 8px; color: #111827;">Connected Successfully!</h2>
-            <p style="margin: 0; color: #6b7280; font-size: 14px;">Your Instagram account @${sanitizedAccount.username} is connected. Closing this window...</p>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Instagram OAuth Diagnostic - Error</title>
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0b0f19;
+            color: #f3f4f6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 24px;
+          }
+          .card {
+            background-color: #111827;
+            border: 1px solid #371b22;
+            border-radius: 16px;
+            max-width: 640px;
+            width: 100%;
+            padding: 36px 32px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+          }
+          .badge-error {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background-color: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            padding: 6px 14px;
+            border-radius: 9999px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 20px;
+          }
+          h1 {
+            font-size: 22px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 8px;
+          }
+          .subtitle {
+            font-size: 15px;
+            color: #9ca3af;
+            margin-bottom: 28px;
+            line-height: 1.5;
+          }
+          .diagnostic-box {
+            background-color: #1f1619;
+            border: 1px solid #451a24;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 28px;
+          }
+          .diagnostic-title {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #f87171;
+            margin-bottom: 14px;
+          }
+          .diagnostic-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 10px 0;
+            border-bottom: 1px solid #381a22;
+            font-size: 14px;
+          }
+          .diagnostic-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+          }
+          .label {
+            color: #9ca3af;
+            font-weight: 500;
+          }
+          .value {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 13px;
+            font-weight: 600;
+            color: #fca5a5;
+            text-align: right;
+            max-width: 65%;
+            word-break: break-all;
+          }
+          .value.info {
+            color: #93c5fd;
+          }
+          .action-row {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+          }
+          .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s;
+            background-color: #1f2937;
+            color: #d1d5db;
+            border: 1px solid #374151;
+          }
+          .btn:hover {
+            background-color: #374151;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="badge-error">
+            <span>●</span> Authorization Error
           </div>
-          <script>
-            if (window.opener) {
-              window.opener.postMessage({ type: 'INSTAGRAM_CONNECTED', account: ${JSON.stringify(sanitizedAccount)} }, '*');
-              setTimeout(function() { window.close(); }, 800);
-            } else {
-              setTimeout(function() { window.location.href = '/?tab=instagram&connected=true'; }, 1000);
-            }
-          </script>
-        </body>
+          <h1>${escapeHtml(errorTitle)}</h1>
+          <p class="subtitle">${escapeHtml(errorSubtitle)}</p>
+          
+          <div class="diagnostic-box">
+            <div class="diagnostic-title">Diagnostic Details</div>
+            <div class="diagnostic-row">
+              <span class="label">OAuth authorization succeeded:</span>
+              <span class="value">NO</span>
+            </div>
+            <div class="diagnostic-row">
+              <span class="label">Error:</span>
+              <span class="value">${escapeHtml(errName)}</span>
+            </div>
+            <div class="diagnostic-row">
+              <span class="label">Error Reason:</span>
+              <span class="value">${escapeHtml(errReason)}</span>
+            </div>
+            <div class="diagnostic-row">
+              <span class="label">Error Description:</span>
+              <span class="value">${escapeHtml(errDesc)}</span>
+            </div>
+            <div class="diagnostic-row">
+              <span class="label">Redirect URI:</span>
+              <span class="value info">${escapeHtml(productionCallbackUrl)}</span>
+            </div>
+            <div class="diagnostic-row">
+              <span class="label">Timestamp:</span>
+              <span class="value info">${escapeHtml(currentUtcTimestamp)}</span>
+            </div>
+          </div>
+
+          <div class="action-row">
+            <a href="/?tab=instagram" class="btn">Return to Dashboard</a>
+          </div>
+        </div>
+      </body>
       </html>
     `;
 
-    res.send(htmlResponse);
-  } catch (err: any) {
-    LoggingService.error('Failed processing Instagram OAuth callback', err?.message);
-    res.redirect('/?tab=instagram&error=Failed+to+complete+Instagram+OAuth+connection');
+    res.status(400).send(errorHtml);
+    return;
   }
+
+  // 2. Validate that state parameter exists
+  if (!state || typeof state !== 'string' || !state.trim()) {
+    LoggingService.warn('Meta OAuth callback missing state parameter');
+    const missingStateHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Instagram OAuth Diagnostic - Missing State</title>
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0b0f19;
+            color: #f3f4f6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 24px;
+          }
+          .card {
+            background-color: #111827;
+            border: 1px solid #371b22;
+            border-radius: 16px;
+            max-width: 640px;
+            width: 100%;
+            padding: 36px 32px;
+          }
+          .badge-error {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background-color: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            padding: 6px 14px;
+            border-radius: 9999px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 20px;
+          }
+          h1 { font-size: 22px; font-weight: 700; color: #ffffff; margin-bottom: 8px; }
+          .subtitle { font-size: 15px; color: #9ca3af; margin-bottom: 28px; line-height: 1.5; }
+          .diagnostic-box {
+            background-color: #1f1619;
+            border: 1px solid #451a24;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 28px;
+          }
+          .diagnostic-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #f87171; margin-bottom: 14px; }
+          .diagnostic-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #381a22; font-size: 14px; }
+          .diagnostic-row:last-child { border-bottom: none; }
+          .label { color: #9ca3af; }
+          .value { font-family: monospace; font-size: 13px; color: #fca5a5; }
+          .value.info { color: #93c5fd; }
+          .action-row { display: flex; justify-content: flex-end; }
+          .btn { padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; text-decoration: none; background-color: #1f2937; color: #d1d5db; border: 1px solid #374151; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="badge-error"><span>●</span> Validation Error</div>
+          <h1>State Parameter Missing</h1>
+          <p class="subtitle">The callback request received from Meta did not contain a state parameter.</p>
+          <div class="diagnostic-box">
+            <div class="diagnostic-title">Diagnostic Details</div>
+            <div class="diagnostic-row"><span class="label">OAuth authorization succeeded:</span><span class="value">NO</span></div>
+            <div class="diagnostic-row"><span class="label">State verified:</span><span class="value">NO (missing state)</span></div>
+            <div class="diagnostic-row"><span class="label">Redirect URI:</span><span class="value info">${escapeHtml(productionCallbackUrl)}</span></div>
+            <div class="diagnostic-row"><span class="label">Timestamp:</span><span class="value info">${escapeHtml(currentUtcTimestamp)}</span></div>
+          </div>
+          <div class="action-row"><a href="/?tab=instagram" class="btn">Return to Dashboard</a></div>
+        </div>
+      </body>
+      </html>
+    `;
+    res.status(400).send(missingStateHtml);
+    return;
+  }
+
+  // 3. Validate the OAuth state using stateless Vercel-compatible verification (cookie + HMAC)
+  const cookies = parseCookies(req.headers.cookie);
+  const cookieState = cookies['ig_oauth_state'] || null;
+  const stateValidation = InstagramService.validateAndConsumeOAuthState(state, cookieState);
+
+  if (!stateValidation.isValid) {
+    LoggingService.warn('Meta OAuth callback state validation failed');
+    const invalidStateHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Instagram OAuth Diagnostic - State Verification Failed</title>
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0b0f19;
+            color: #f3f4f6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 24px;
+          }
+          .card {
+            background-color: #111827;
+            border: 1px solid #371b22;
+            border-radius: 16px;
+            max-width: 640px;
+            width: 100%;
+            padding: 36px 32px;
+          }
+          .badge-error {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background-color: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            padding: 6px 14px;
+            border-radius: 9999px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 20px;
+          }
+          h1 { font-size: 22px; font-weight: 700; color: #ffffff; margin-bottom: 8px; }
+          .subtitle { font-size: 15px; color: #9ca3af; margin-bottom: 28px; line-height: 1.5; }
+          .diagnostic-box {
+            background-color: #1f1619;
+            border: 1px solid #451a24;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 28px;
+          }
+          .diagnostic-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #f87171; margin-bottom: 14px; }
+          .diagnostic-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #381a22; font-size: 14px; }
+          .diagnostic-row:last-child { border-bottom: none; }
+          .label { color: #9ca3af; }
+          .value { font-family: monospace; font-size: 13px; color: #fca5a5; }
+          .value.info { color: #93c5fd; }
+          .action-row { display: flex; justify-content: flex-end; }
+          .btn { padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; text-decoration: none; background-color: #1f2937; color: #d1d5db; border: 1px solid #374151; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="badge-error"><span>●</span> Security Verification Failed</div>
+          <h1>OAuth State Verification Failed</h1>
+          <p class="subtitle">The OAuth session state could not be verified or has expired (15-minute TTL).</p>
+          <div class="diagnostic-box">
+            <div class="diagnostic-title">Diagnostic Details</div>
+            <div class="diagnostic-row"><span class="label">OAuth authorization succeeded:</span><span class="value">NO</span></div>
+            <div class="diagnostic-row"><span class="label">State verified:</span><span class="value">NO (invalid or expired)</span></div>
+            <div class="diagnostic-row"><span class="label">Redirect URI:</span><span class="value info">${escapeHtml(productionCallbackUrl)}</span></div>
+            <div class="diagnostic-row"><span class="label">Timestamp:</span><span class="value info">${escapeHtml(currentUtcTimestamp)}</span></div>
+          </div>
+          <div class="action-row"><a href="/?tab=instagram" class="btn">Return to Dashboard</a></div>
+        </div>
+      </body>
+      </html>
+    `;
+    res.status(400).send(invalidStateHtml);
+    return;
+  }
+
+  // 4. Verify that Meta returned a non-empty code parameter
+  if (!code || typeof code !== 'string' || !code.trim()) {
+    LoggingService.warn('Meta OAuth callback missing authorization code');
+    const missingCodeHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Instagram OAuth Diagnostic - Missing Code</title>
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0b0f19;
+            color: #f3f4f6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 24px;
+          }
+          .card {
+            background-color: #111827;
+            border: 1px solid #371b22;
+            border-radius: 16px;
+            max-width: 640px;
+            width: 100%;
+            padding: 36px 32px;
+          }
+          .badge-error {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background-color: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            padding: 6px 14px;
+            border-radius: 9999px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 20px;
+          }
+          h1 { font-size: 22px; font-weight: 700; color: #ffffff; margin-bottom: 8px; }
+          .subtitle { font-size: 15px; color: #9ca3af; margin-bottom: 28px; line-height: 1.5; }
+          .diagnostic-box {
+            background-color: #1f1619;
+            border: 1px solid #451a24;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 28px;
+          }
+          .diagnostic-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #f87171; margin-bottom: 14px; }
+          .diagnostic-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #381a22; font-size: 14px; }
+          .diagnostic-row:last-child { border-bottom: none; }
+          .label { color: #9ca3af; }
+          .value { font-family: monospace; font-size: 13px; color: #fca5a5; }
+          .value.info { color: #93c5fd; }
+          .action-row { display: flex; justify-content: flex-end; }
+          .btn { padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; text-decoration: none; background-color: #1f2937; color: #d1d5db; border: 1px solid #374151; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="badge-error"><span>●</span> Code Missing</div>
+          <h1>Authorization Code Missing</h1>
+          <p class="subtitle">State was verified, but Meta did not return an authorization code parameter.</p>
+          <div class="diagnostic-box">
+            <div class="diagnostic-title">Diagnostic Details</div>
+            <div class="diagnostic-row"><span class="label">OAuth authorization succeeded:</span><span class="value">NO</span></div>
+            <div class="diagnostic-row"><span class="label">State verified:</span><span class="value" style="color: #34d399;">YES</span></div>
+            <div class="diagnostic-row"><span class="label">Auth code received:</span><span class="value">NO</span></div>
+            <div class="diagnostic-row"><span class="label">Redirect URI:</span><span class="value info">${escapeHtml(productionCallbackUrl)}</span></div>
+            <div class="diagnostic-row"><span class="label">Timestamp:</span><span class="value info">${escapeHtml(currentUtcTimestamp)}</span></div>
+          </div>
+          <div class="action-row"><a href="/?tab=instagram" class="btn">Return to Dashboard</a></div>
+        </div>
+      </body>
+      </html>
+    `;
+    res.status(400).send(missingCodeHtml);
+    return;
+  }
+
+  // 5. Success! Clear the state cookie and display the diagnostic success page.
+  // CRITICAL: DO NOT exchange the code yet. DO NOT require META_APP_SECRET. DO NOT log or display code.
+  res.clearCookie('ig_oauth_state', { path: '/' });
+  LoggingService.info('Diagnostic check passed: Meta OAuth Step 1 succeeded, authorization code received');
+
+  const successHtml = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Instagram OAuth Step 1 Succeeded</title>
+      <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+          background-color: #0b0f19;
+          color: #f3f4f6;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 100vh;
+          padding: 24px;
+        }
+        .card {
+          background-color: #111827;
+          border: 1px solid #1f2937;
+          border-radius: 16px;
+          max-width: 640px;
+          width: 100%;
+          padding: 36px 32px;
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+        }
+        .badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          background-color: rgba(16, 185, 129, 0.15);
+          color: #10b981;
+          border: 1px solid rgba(16, 185, 129, 0.3);
+          padding: 6px 14px;
+          border-radius: 9999px;
+          font-size: 13px;
+          font-weight: 600;
+          margin-bottom: 20px;
+        }
+        h1 {
+          font-size: 24px;
+          font-weight: 700;
+          color: #ffffff;
+          margin-bottom: 8px;
+        }
+        .subtitle {
+          font-size: 15px;
+          color: #9ca3af;
+          margin-bottom: 28px;
+          line-height: 1.5;
+        }
+        .diagnostic-box {
+          background-color: #1a2234;
+          border: 1px solid #2d3748;
+          border-radius: 12px;
+          padding: 20px;
+          margin-bottom: 28px;
+        }
+        .diagnostic-title {
+          font-size: 12px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: #60a5fa;
+          margin-bottom: 14px;
+        }
+        .diagnostic-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          padding: 10px 0;
+          border-bottom: 1px solid #283347;
+          font-size: 14px;
+        }
+        .diagnostic-row:last-child {
+          border-bottom: none;
+          padding-bottom: 0;
+        }
+        .label {
+          color: #9ca3af;
+          font-weight: 500;
+        }
+        .value {
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          font-size: 13px;
+          font-weight: 600;
+          color: #e5e7eb;
+          text-align: right;
+          max-width: 65%;
+          word-break: break-all;
+        }
+        .value.success {
+          color: #34d399;
+        }
+        .value.info {
+          color: #93c5fd;
+        }
+        .action-row {
+          display: flex;
+          gap: 12px;
+          justify-content: flex-end;
+        }
+        .btn {
+          padding: 10px 20px;
+          border-radius: 8px;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          text-decoration: none;
+          transition: all 0.2s;
+        }
+        .btn-primary {
+          background: linear-gradient(135deg, #e1306c, #f77737);
+          color: white;
+          border: none;
+        }
+        .btn-primary:hover {
+          opacity: 0.95;
+        }
+        .btn-secondary {
+          background-color: #1f2937;
+          color: #d1d5db;
+          border: 1px solid #374151;
+        }
+        .btn-secondary:hover {
+          background-color: #374151;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <div class="badge">
+          <span>●</span> Diagnostic Mode Active
+        </div>
+        <h1>Instagram OAuth Step 1 Succeeded</h1>
+        <p class="subtitle">Meta successfully redirected the authorization request back to the production application.</p>
+        
+        <div class="diagnostic-box">
+          <div class="diagnostic-title">Safe Diagnostic Report</div>
+          <div class="diagnostic-row">
+            <span class="label">OAuth authorization succeeded:</span>
+            <span class="value success">YES</span>
+          </div>
+          <div class="diagnostic-row">
+            <span class="label">Redirect URI:</span>
+            <span class="value">${escapeHtml(productionCallbackUrl)}</span>
+          </div>
+          <div class="diagnostic-row">
+            <span class="label">Auth code received:</span>
+            <span class="value success">YES</span>
+          </div>
+          <div class="diagnostic-row">
+            <span class="label">State verified:</span>
+            <span class="value success">YES</span>
+          </div>
+          <div class="diagnostic-row">
+            <span class="label">Timestamp:</span>
+            <span class="value info">${escapeHtml(currentUtcTimestamp)}</span>
+          </div>
+          <div class="diagnostic-row">
+            <span class="label">Next step:</span>
+            <span class="value">Ready for token exchange implementation once environment secrets are configured.</span>
+          </div>
+        </div>
+
+        <div class="action-row">
+          <a href="/?tab=instagram" class="btn btn-secondary">Return to Dashboard</a>
+          <button onclick="if(window.opener){window.close();}else{window.location.href='/?tab=instagram';}" class="btn btn-primary">Done</button>
+        </div>
+      </div>
+      <script>
+        if (window.opener) {
+          try {
+            window.opener.postMessage({ type: 'INSTAGRAM_DIAGNOSTIC_SUCCESS' }, '*');
+          } catch (e) {}
+        }
+      </script>
+    </body>
+    </html>
+  `;
+
+  res.send(successHtml);
 });
 
 /**

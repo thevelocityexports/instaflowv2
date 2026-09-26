@@ -34,9 +34,11 @@ export class InstagramService {
   ].join(',');
 
   private static oauthStates = new Map<string, OAuthStateData>();
+  private static readonly STATE_SECRET = process.env.SESSION_SECRET || 'instaflow_serverless_oauth_state_salt';
 
   /**
-   * Generates a cryptographically secure CSRF state token and stores it temporarily with a 15-minute TTL
+   * Generates a cryptographically secure, stateless CSRF state token that works reliably
+   * across Vercel serverless function invocations without requiring shared server memory.
    */
   public static createOAuthState(userId?: string): string {
     const now = Date.now();
@@ -47,8 +49,12 @@ export class InstagramService {
       }
     }
 
-    const randomHex = crypto.randomBytes(24).toString('hex');
-    const stateToken = `ig_${randomHex}`;
+    const randomHex = crypto.randomBytes(16).toString('hex');
+    const safeUser = (userId || 'usr_default').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+    const payload = `${now}.${safeUser}.${randomHex}`;
+    const sig = crypto.createHmac('sha256', this.STATE_SECRET).update(payload).digest('hex').slice(0, 16);
+    const stateToken = `ig_s_${payload}.${sig}`;
+
     this.oauthStates.set(stateToken, {
       createdAt: now,
       userId,
@@ -57,27 +63,59 @@ export class InstagramService {
   }
 
   /**
-   * Validates and consumes the OAuth CSRF state token (strictly one-time use)
+   * Validates the OAuth CSRF state token.
+   * Supports:
+   * 1. HttpOnly cookie comparison (stateless across serverless instances)
+   * 2. Self-validating cryptographic HMAC signature + 15-minute TTL
+   * 3. In-memory storage fallback for local single-process development
    */
-  public static validateAndConsumeOAuthState(state: string | undefined): { isValid: boolean; userId?: string } {
+  public static validateAndConsumeOAuthState(
+    state: string | undefined,
+    cookieState?: string | null
+  ): { isValid: boolean; userId?: string } {
     if (!state || typeof state !== 'string') {
       return { isValid: false };
     }
 
+    // 1. Direct cookie match (browser sent back the same state via HttpOnly cookie)
+    if (cookieState && cookieState.trim() === state.trim()) {
+      return { isValid: true };
+    }
+
+    // 2. Stateless cryptographic HMAC signature verification (tamper-proof + 15-min TTL)
+    if (state.startsWith('ig_s_')) {
+      const parts = state.slice(5).split('.');
+      if (parts.length === 4) {
+        const [timeStr, safeUser, randomHex, sig] = parts;
+        const timestamp = parseInt(timeStr, 10);
+        if (!isNaN(timestamp)) {
+          const age = Date.now() - timestamp;
+          if (age >= 0 && age < 15 * 60 * 1000) {
+            const payload = `${timestamp}.${safeUser}.${randomHex}`;
+            const expectedSig = crypto
+              .createHmac('sha256', this.STATE_SECRET)
+              .update(payload)
+              .digest('hex')
+              .slice(0, 16);
+            if (sig === expectedSig) {
+              return { isValid: true, userId: safeUser };
+            }
+          }
+        }
+      }
+    }
+
+    // 3. In-memory map fallback
     const stateData = this.oauthStates.get(state);
-    if (!stateData) {
-      return { isValid: false };
+    if (stateData) {
+      this.oauthStates.delete(state);
+      const isExpired = Date.now() - stateData.createdAt > 15 * 60 * 1000;
+      if (!isExpired) {
+        return { isValid: true, userId: stateData.userId };
+      }
     }
 
-    // Always delete on first check to prevent replay attacks
-    this.oauthStates.delete(state);
-
-    const isExpired = Date.now() - stateData.createdAt > 15 * 60 * 1000;
-    if (isExpired) {
-      return { isValid: false };
-    }
-
-    return { isValid: true, userId: stateData.userId };
+    return { isValid: false };
   }
 
   private static configFilePath = path.resolve(
@@ -96,9 +134,16 @@ export class InstagramService {
 
   private static loadPersistedConfig() {
     try {
-      if (fs.existsSync(InstagramService.configFilePath)) {
-        const content = fs.readFileSync(InstagramService.configFilePath, 'utf-8');
-        return JSON.parse(content);
+      const candidatePaths = [
+        path.resolve('/tmp', 'data', 'meta-config.json'),
+        InstagramService.configFilePath,
+        path.resolve(process.cwd(), 'data', 'meta-config.json'),
+      ];
+      for (const p of candidatePaths) {
+        if (fs.existsSync(p)) {
+          const content = fs.readFileSync(p, 'utf-8');
+          return JSON.parse(content);
+        }
       }
     } catch (e) {
       console.warn('Failed to load persisted Meta config:', e);
