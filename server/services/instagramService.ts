@@ -90,6 +90,18 @@ export class InstagramService {
   }
 
   /**
+   * Securely retrieve the server-side access token from process.env if configured
+   * Never exposed to frontend or external callers.
+   */
+  public static getServerAccessToken(): string | null {
+    const token = process.env.INSTAGRAM_ACCESS_TOKEN?.trim();
+    if (!token || token === 'your_server_side_instagram_access_token_here' || token.length < 10) {
+      return null;
+    }
+    return token;
+  }
+
+  /**
    * Check which Meta environment variables are configured
    */
   static getConfigStatus(): MetaConfigStatus {
@@ -113,12 +125,14 @@ export class InstagramService {
 
     const isAppIdSet = Boolean(appId && !appId.includes('MY_META') && appId.trim().length > 3);
     const isAppSecretSet = Boolean(appSecret && !appSecret.includes('MY_META') && appSecret.trim().length > 5);
+    const hasServerAccessToken = Boolean(this.getServerAccessToken());
 
     return {
       appIdConfigured: isAppIdSet,
       appSecretConfigured: isAppSecretSet,
       redirectUriConfigured: Boolean(redirectUri),
       verifyTokenConfigured: Boolean(verifyToken),
+      hasServerAccessToken,
       appId: isAppIdSet ? appId : undefined,
       appSecretMasked: isAppSecretSet && appSecret ? `${appSecret.slice(0, 4)}••••••••${appSecret.slice(-3)}` : undefined,
       redirectUri,
@@ -292,14 +306,16 @@ export class InstagramService {
       };
     }
 
-    if (!accessToken) {
+    const tokenToUse = (accessToken || InstagramService.getServerAccessToken() || '').trim();
+
+    if (!tokenToUse) {
       return {
         success: false,
         error: 'Instagram not connected: Active Meta access token is required.',
       };
     }
 
-    const cleanToken = accessToken.trim();
+    const cleanToken = tokenToUse;
     const candidateEndpoints = [
       `https://graph.facebook.com/v21.0/${commentId}/replies`,
       `https://graph.instagram.com/v21.0/${commentId}/replies`,
@@ -385,14 +401,16 @@ export class InstagramService {
       };
     }
 
-    if (!accessToken) {
+    const tokenToUse = (accessToken || InstagramService.getServerAccessToken() || '').trim();
+
+    if (!tokenToUse) {
       return {
         success: false,
         error: 'Instagram not connected: Active Meta access token is required.',
       };
     }
 
-    const cleanToken = accessToken.trim();
+    const cleanToken = tokenToUse;
 
     // Prepare recipient variations:
     // 1. Comment ID (Meta comment-to-DM conversion endpoint)
@@ -482,15 +500,17 @@ export class InstagramService {
   }> {
     const { instagramUserId, accessToken, limit = 50 } = options;
 
-    if (!accessToken) {
+    const tokenToUse = (accessToken || InstagramService.getServerAccessToken() || '').trim();
+
+    if (!tokenToUse) {
       return {
         success: false,
         media: [],
-        error: 'Instagram Access Token not provided. Connect via Meta OAuth or enter your Page/User Access Token.',
+        error: 'Instagram Access Token not provided. Connect via Meta OAuth, enter your Page/User Access Token, or configure INSTAGRAM_ACCESS_TOKEN.',
       };
     }
 
-    const cleanToken = accessToken.trim();
+    const cleanToken = tokenToUse;
     if (!InstagramService.isParseableMetaToken(cleanToken)) {
       return {
         success: false,
@@ -721,7 +741,7 @@ export class InstagramService {
    * Queries Meta Graph API across Facebook Pages, Instagram Business Accounts, and Instagram Basic Display
    */
   static async fetchProfileAndMediaWithToken(options: {
-    accessToken: string;
+    accessToken?: string;
     instagramUserId?: string;
     username?: string;
     appId?: string;
@@ -739,7 +759,7 @@ export class InstagramService {
     error?: string;
   }> {
     const { accessToken, instagramUserId, username, appId } = options;
-    const cleanToken = accessToken.trim();
+    const cleanToken = (accessToken || InstagramService.getServerAccessToken() || '').trim();
     const cleanUsername = username ? username.replace(/^@/, '').trim().toLowerCase() : '';
 
     if (appId && typeof appId === 'string' && appId.trim()) {

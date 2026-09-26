@@ -164,6 +164,7 @@ export interface MetaConfigStatus {
   appSecretConfigured: boolean;
   redirectUriConfigured: boolean;
   verifyTokenConfigured: boolean;
+  hasServerAccessToken?: boolean;
   appId?: string;
   appSecretMasked?: string;
   redirectUri?: string;

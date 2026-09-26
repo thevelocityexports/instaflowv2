@@ -174,6 +174,25 @@ export class ApiClient {
     return this.request('/instagram/config-status');
   }
 
+  static async getInstagramIntegrationStatus(): Promise<{
+    isConfigured: boolean;
+    isValid: boolean;
+    tokenType?: string;
+    expiresAt?: string;
+    scopes?: string[];
+    accountId?: string;
+    username?: string;
+    name?: string;
+    profilePictureUrl?: string;
+    followersCount?: number;
+    mediaCount?: number;
+    accountType?: string;
+    error?: string;
+    message?: string;
+  }> {
+    return this.request('/instagram/integration-status');
+  }
+
   static async saveMetaConfig(data: {
     appId?: string;
     appSecret?: string;

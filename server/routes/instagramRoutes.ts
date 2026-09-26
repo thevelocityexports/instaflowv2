@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { databaseService } from '../services/databaseService';
 import { InstagramService } from '../services/instagramService';
+import { InstagramApiClient } from '../services/instagramApiClient';
 import { AuthService, AuthenticatedRequest } from '../services/authService';
 import { LoggingService } from '../services/loggingService';
 
@@ -13,6 +14,54 @@ const router = Router();
 router.get('/config-status', (_req, res) => {
   const status = InstagramService.getConfigStatus();
   res.json({ config: status });
+});
+
+/**
+ * GET /api/instagram/integration-status
+ * Safe endpoint reporting server-side Meta Instagram API integration status.
+ * Never returns access tokens.
+ */
+router.get('/integration-status', async (_req, res): Promise<void> => {
+  try {
+    const isConfigured = InstagramApiClient.isTokenConfigured();
+
+    if (!isConfigured) {
+      res.json({
+        isConfigured: false,
+        isValid: false,
+        message: 'Server access token (INSTAGRAM_ACCESS_TOKEN) is not configured.',
+      });
+      return;
+    }
+
+    const [health, profile] = await Promise.all([
+      InstagramApiClient.verifyTokenHealth(),
+      InstagramApiClient.getAccountProfile(),
+    ]);
+
+    res.json({
+      isConfigured: true,
+      isValid: health.isValid,
+      tokenType: health.tokenType,
+      expiresAt: health.expiresAt,
+      scopes: health.scopes,
+      accountId: profile?.id || health.userId,
+      username: profile?.username,
+      name: profile?.name,
+      profilePictureUrl: profile?.profilePictureUrl,
+      followersCount: profile?.followersCount,
+      mediaCount: profile?.mediaCount,
+      accountType: profile?.accountType,
+      error: health.error,
+    });
+  } catch (err: any) {
+    LoggingService.error('Error checking Instagram integration status', err);
+    res.status(500).json({
+      isConfigured: false,
+      isValid: false,
+      error: err?.message || 'Failed to determine Instagram integration status',
+    });
+  }
 });
 
 /**
