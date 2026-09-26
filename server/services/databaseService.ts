@@ -527,13 +527,15 @@ export class DatabaseService {
         a.instagramUserId === instagramUserId
     );
 
+    const resolvedAvatar = data.profilePictureUrl || `https://unavatar.io/instagram/${cleanUsername}`;
+
     if (account) {
       account.username = cleanUsername;
       account.name = data.name || cleanUsername;
       account.userId = validUserId;
       account.isConnected = true;
       if (data.accessToken) account.accessToken = data.accessToken;
-      if (data.profilePictureUrl) account.profilePictureUrl = data.profilePictureUrl;
+      account.profilePictureUrl = data.profilePictureUrl || account.profilePictureUrl || resolvedAvatar;
       account.updatedAt = now;
     } else {
       account = {
@@ -542,7 +544,7 @@ export class DatabaseService {
         instagramUserId,
         username: cleanUsername,
         name: data.name || cleanUsername,
-        profilePictureUrl: data.profilePictureUrl,
+        profilePictureUrl: resolvedAvatar,
         accessToken: data.accessToken,
         isConnected: true,
         connectedAt: now,

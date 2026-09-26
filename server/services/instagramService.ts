@@ -830,20 +830,21 @@ export class InstagramService {
 
     const candidateEndpoints: string[] = [];
 
-    // If a numeric Instagram Business ID is known, prioritize Facebook Graph API /{ig-id}/media
-    if (instagramUserId && /^\d+$/.test(instagramUserId.trim())) {
-      candidateEndpoints.push(
-        `https://graph.facebook.com/v21.0/${instagramUserId.trim()}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=${limit}&access_token=${cleanToken}`
-      );
-    }
-
-    // Instagram User Token endpoints
+    // 1. Direct Instagram Graph User Token media query (Clean, supported fields only!)
     candidateEndpoints.push(
-      `https://graph.instagram.com/v21.0/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,children{media_url,thumbnail_url}&limit=${limit}&access_token=${cleanToken}`,
+      `https://graph.instagram.com/v21.0/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,username&limit=${limit}&access_token=${cleanToken}`,
       `https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=${limit}&access_token=${cleanToken}`
     );
 
-    // If not numeric, try me/accounts discovery to find pages and their instagram_business_account
+    // 2. If a numeric Instagram User ID is provided, query directly
+    if (instagramUserId && /^\d+$/.test(instagramUserId.trim())) {
+      candidateEndpoints.unshift(
+        `https://graph.facebook.com/v21.0/${instagramUserId.trim()}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=${limit}&access_token=${cleanToken}`,
+        `https://graph.instagram.com/v21.0/${instagramUserId.trim()}/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,username&limit=${limit}&access_token=${cleanToken}`
+      );
+    }
+
+    // 3. If user token can access Page / Business accounts
     try {
       const accountsRes = await fetch(`https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username}&access_token=${cleanToken}`);
       if (accountsRes.ok) {

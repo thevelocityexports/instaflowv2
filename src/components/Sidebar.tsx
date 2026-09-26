@@ -111,18 +111,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <img
                     src={
                       connectedAccount.profilePictureUrl ||
-                      `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
-                        connectedAccount.name || connectedAccount.username || 'IG'
-                      )}`
+                      `https://unavatar.io/instagram/${connectedAccount.username}`
                     }
                     alt={connectedAccount.username}
                     referrerPolicy="no-referrer"
                     crossOrigin="anonymous"
                     className="w-full h-full object-cover"
                     onError={(e) => {
-                      e.currentTarget.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
-                        connectedAccount.name || connectedAccount.username || 'IG'
-                      )}`;
+                      if (!e.currentTarget.src.includes('dicebear')) {
+                        e.currentTarget.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+                          connectedAccount.name || connectedAccount.username || 'IG'
+                        )}`;
+                      }
                     }}
                   />
                 </div>
