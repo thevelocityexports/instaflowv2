@@ -347,27 +347,32 @@ export class InstagramService {
   }
 
   /**
-   * Check which Meta environment variables are configured
+   * Check which Meta environment variables are configured.
+   * Priority: process.env (Vercel environment variables) > runtimeConfig (dynamic config)
    */
   static getConfigStatus(): MetaConfigStatus {
-    const appId = this.runtimeConfig.appId || process.env.META_APP_ID;
-    const appSecret = this.runtimeConfig.appSecret || process.env.META_APP_SECRET;
+    const rawAppId = process.env.META_APP_ID?.trim() || this.runtimeConfig.appId?.trim();
+    const rawAppSecret = process.env.META_APP_SECRET?.trim() || this.runtimeConfig.appSecret?.trim();
+
+    // Sanitize against test/placeholder values
+    const appId = rawAppId && !rawAppId.includes('MY_META') && rawAppId.length > 3 ? rawAppId : undefined;
+    const appSecret = rawAppSecret && !rawAppSecret.includes('MY_META') && !rawAppSecret.includes('testsecret') && rawAppSecret.length > 5 ? rawAppSecret : undefined;
     const defaultBaseUrl = this.getPublicBaseUrl();
 
     // Canonical redirect URI (strictly identical in authorize and exchange)
     const redirectUri = this.getRedirectUri();
 
     const verifyToken =
-      this.runtimeConfig.verifyToken ||
-      process.env.META_VERIFY_TOKEN ||
+      process.env.META_VERIFY_TOKEN?.trim() ||
+      this.runtimeConfig.verifyToken?.trim() ||
       'instaflow_verify_secret';
 
     const webhookCallbackUrl =
-      this.runtimeConfig.webhookCallbackUrl ||
+      this.runtimeConfig.webhookCallbackUrl?.trim() ||
       `${defaultBaseUrl}/api/webhooks/instagram`;
 
-    const isAppIdSet = Boolean(appId && !appId.includes('MY_META') && appId.trim().length > 3);
-    const isAppSecretSet = Boolean(appSecret && !appSecret.includes('MY_META') && appSecret.trim().length > 5);
+    const isAppIdSet = Boolean(appId);
+    const isAppSecretSet = Boolean(appSecret);
     const hasServerAccessToken = Boolean(this.getServerAccessToken());
 
     return {
@@ -376,7 +381,7 @@ export class InstagramService {
       redirectUriConfigured: Boolean(redirectUri),
       verifyTokenConfigured: Boolean(verifyToken),
       hasServerAccessToken,
-      appId: isAppIdSet ? appId : undefined,
+      appId,
       appSecretMasked: isAppSecretSet && appSecret ? `${appSecret.slice(0, 4)}••••••••${appSecret.slice(-3)}` : undefined,
       redirectUri,
       verifyToken,
@@ -474,12 +479,18 @@ export class InstagramService {
     error?: string;
   }> {
     const config = this.getConfigStatus();
-    const clientId = config.appId || process.env.META_APP_ID || '';
-    const clientSecret = this.runtimeConfig.appSecret || process.env.META_APP_SECRET || '';
+    const clientId = process.env.META_APP_ID?.trim() || config.appId || '';
+    const rawSecret = process.env.META_APP_SECRET?.trim() || this.runtimeConfig.appSecret?.trim() || '';
+    const clientSecret = rawSecret && !rawSecret.includes('testsecret') && rawSecret.length > 5 ? rawSecret : '';
 
-    if (!config.appIdConfigured || !config.appSecretConfigured || !clientId || !clientSecret) {
+    if (!config.appIdConfigured || !clientSecret || !clientId) {
+      LoggingService.warn('Token exchange aborted: missing or placeholder Meta credentials', {
+        appIdConfigured: config.appIdConfigured,
+        hasClientId: Boolean(clientId),
+        hasValidSecret: Boolean(clientSecret),
+      });
       return {
-        error: 'Requires Meta Developer configuration: META_APP_ID and META_APP_SECRET must be configured.',
+        error: 'Requires Meta Developer configuration: Valid META_APP_ID and META_APP_SECRET must be configured in environment variables.',
       };
     }
 
@@ -497,7 +508,7 @@ export class InstagramService {
         code,
       });
 
-      LoggingService.info(`Exchanging Instagram authorization code with ${tokenUrl} using redirect_uri=${redirectUri}`);
+      LoggingService.info(`Exchanging Instagram authorization code with ${tokenUrl} for client_id=${clientId} using redirect_uri=${redirectUri}`);
       const response = await fetch(tokenUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -506,9 +517,24 @@ export class InstagramService {
 
       const data = await response.json();
       if (!response.ok || data.error || !data.access_token) {
-        const errorMsg = data.error?.message || data.error_message || 'Meta Instagram OAuth token exchange failed';
-        LoggingService.error('Meta Instagram OAuth token exchange failed', errorMsg);
-        return { error: errorMsg };
+        const errorDetail = typeof data.error === 'object' ? data.error : null;
+        const errorMsg = errorDetail?.message || data.error_message || (typeof data.error === 'string' ? data.error : 'Meta Instagram OAuth token exchange failed');
+        const errorCode = errorDetail?.code;
+        const errorSubcode = errorDetail?.error_subcode;
+        const errorType = errorDetail?.type;
+
+        LoggingService.error('Meta Instagram OAuth token exchange failed', {
+          message: errorMsg,
+          code: errorCode,
+          subcode: errorSubcode,
+          type: errorType,
+          redirectUriUsed: redirectUri,
+          clientIdUsed: clientId,
+        });
+
+        return {
+          error: errorMsg,
+        };
       }
 
       const shortLivedToken: string = data.access_token;
