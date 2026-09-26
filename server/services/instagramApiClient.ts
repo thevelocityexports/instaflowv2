@@ -93,39 +93,51 @@ export class InstagramApiClient {
       };
     }
 
-    // Try debug_token endpoint first
-    try {
-      const debugUrl = `${this.FB_GRAPH_BASE}/debug_token?input_token=${encodeURIComponent(token)}&access_token=${encodeURIComponent(token)}`;
-      const res = await fetch(debugUrl);
-      const data = await res.json().catch(() => null);
+    const isInstagramToken = token.startsWith('IGA') || token.startsWith('IGQ');
 
-      if (res.ok && data?.data) {
-        const d = data.data;
-        const isValid = Boolean(d.is_valid);
-        let expiresAt: string | undefined = undefined;
-        if (d.expires_at) {
-          expiresAt = d.expires_at === 0 ? 'Never (Long-Lived / System Token)' : new Date(d.expires_at * 1000).toISOString();
+    // For Facebook User tokens (EAA...), try debug_token endpoint first
+    if (!isInstagramToken) {
+      try {
+        const debugUrl = `${this.FB_GRAPH_BASE}/debug_token?input_token=${encodeURIComponent(token)}&access_token=${encodeURIComponent(token)}`;
+        const res = await fetch(debugUrl);
+        const data = await res.json().catch(() => null);
+
+        if (res.ok && data?.data) {
+          const d = data.data;
+          const isValid = Boolean(d.is_valid);
+          let expiresAt: string | undefined = undefined;
+          if (d.expires_at) {
+            expiresAt = d.expires_at === 0 ? 'Never (Long-Lived / System Token)' : new Date(d.expires_at * 1000).toISOString();
+          }
+
+          return {
+            configured: true,
+            isValid,
+            tokenType: d.type || 'USER',
+            appId: d.app_id,
+            userId: d.user_id,
+            scopes: d.scopes || [],
+            expiresAt,
+            error: isValid ? undefined : (d.error?.message || 'Token is expired or invalid'),
+          };
         }
+      } catch (_) {}
+    }
 
-        return {
-          configured: true,
-          isValid,
-          tokenType: d.type || 'USER',
-          appId: d.app_id,
-          userId: d.user_id,
-          scopes: d.scopes || [],
-          expiresAt,
-          error: isValid ? undefined : (d.error?.message || 'Token is expired or invalid'),
-        };
-      }
-    } catch (_) {}
+    // Verify token via /me endpoint (prioritize graph.instagram.com for IGA tokens)
+    const candidates = isInstagramToken
+      ? [
+          `${this.IG_GRAPH_BASE}/me?fields=id,username,account_type&access_token=${encodeURIComponent(token)}`,
+          `https://graph.instagram.com/me?fields=id,username&access_token=${encodeURIComponent(token)}`,
+          `${this.FB_GRAPH_BASE}/me?fields=id,name&access_token=${encodeURIComponent(token)}`,
+        ]
+      : [
+          `${this.FB_GRAPH_BASE}/me?fields=id,name&access_token=${encodeURIComponent(token)}`,
+          `${this.IG_GRAPH_BASE}/me?fields=id,username&access_token=${encodeURIComponent(token)}`,
+          `https://graph.instagram.com/me?fields=id,username&access_token=${encodeURIComponent(token)}`,
+        ];
 
-    // Fallback: verify token via /me endpoint
-    const candidates = [
-      `${this.FB_GRAPH_BASE}/me?fields=id,name&access_token=${encodeURIComponent(token)}`,
-      `${this.IG_GRAPH_BASE}/me?fields=id,username&access_token=${encodeURIComponent(token)}`,
-      `https://graph.instagram.com/me?fields=id,username&access_token=${encodeURIComponent(token)}`,
-    ];
+    let lastError: string | undefined = undefined;
 
     for (const url of candidates) {
       try {
@@ -136,28 +148,21 @@ export class InstagramApiClient {
             configured: true,
             isValid: true,
             userId: data.id,
-            scopes: ['instagram_basic'],
+            tokenType: data.account_type || (isInstagramToken ? 'INSTAGRAM_USER' : 'USER'),
+            scopes: ['instagram_basic', 'instagram_manage_comments', 'instagram_manage_messages'],
           };
         } else if (data?.error) {
-          return {
-            configured: true,
-            isValid: false,
-            error: this.sanitizeError(data.error),
-          };
+          lastError = this.sanitizeError(data.error);
         }
       } catch (e) {
-        return {
-          configured: true,
-          isValid: false,
-          error: this.sanitizeError(e),
-        };
+        lastError = this.sanitizeError(e);
       }
     }
 
     return {
       configured: true,
       isValid: false,
-      error: 'Failed to authenticate token with Meta Graph API.',
+      error: lastError || 'Failed to authenticate token with Meta Graph API.',
     };
   }
 

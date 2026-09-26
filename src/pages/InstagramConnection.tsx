@@ -199,7 +199,7 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
     const left = window.screen.width / 2 - width / 2;
     const top = window.screen.height / 2 - height / 2;
     const popup = window.open(
-      '/api/instagram/connect-ig',
+      '/api/instagram/connect',
       'instagram_oauth_popup',
       `toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, copyhistory=no, width=${width}, height=${height}, top=${top}, left=${left}`
     );
@@ -1072,7 +1072,7 @@ export const InstagramConnection: React.FC<InstagramConnectionProps> = ({
                     onClick={handleConnectClick}
                     className="w-full py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-2 shadow-2xs cursor-pointer"
                   >
-                    Connect Via Meta (Facebook Login)
+                    Connect Via Instagram Login (Direct)
                   </button>
                 </div>
               </div>

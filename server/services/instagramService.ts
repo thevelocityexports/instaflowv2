@@ -13,6 +13,12 @@ import { LoggingService } from './loggingService';
 import { MetaConfigStatus, InstagramMediaItem } from '../../shared/types';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
+
+interface OAuthStateData {
+  createdAt: number;
+  userId?: string;
+}
 
 export class InstagramService {
   // Meta Graph API configuration constants - isolated for easy version upgrades
@@ -20,15 +26,59 @@ export class InstagramService {
   public static readonly GRAPH_API_BASE = `https://graph.facebook.com/${InstagramService.GRAPH_API_VERSION}`;
   public static readonly OAUTH_DIALOG_URL = `https://www.facebook.com/${InstagramService.GRAPH_API_VERSION}/dialog/oauth`;
 
-  // Required Meta Scopes for Instagram Comment Automation
+  // Required Meta Scopes for direct Instagram Login
   public static readonly REQUIRED_SCOPES = [
-    'instagram_basic',
-    'instagram_manage_comments',
-    'instagram_manage_messages',
-    'pages_show_list',
-    'pages_read_engagement',
-    'business_management',
+    'instagram_business_basic',
+    'instagram_business_manage_messages',
+    'instagram_business_manage_comments',
   ].join(',');
+
+  private static oauthStates = new Map<string, OAuthStateData>();
+
+  /**
+   * Generates a cryptographically secure CSRF state token and stores it temporarily with a 15-minute TTL
+   */
+  public static createOAuthState(userId?: string): string {
+    const now = Date.now();
+    // Clean up states older than 15 minutes
+    for (const [key, val] of this.oauthStates.entries()) {
+      if (now - val.createdAt > 15 * 60 * 1000) {
+        this.oauthStates.delete(key);
+      }
+    }
+
+    const randomHex = crypto.randomBytes(24).toString('hex');
+    const stateToken = `ig_${randomHex}`;
+    this.oauthStates.set(stateToken, {
+      createdAt: now,
+      userId,
+    });
+    return stateToken;
+  }
+
+  /**
+   * Validates and consumes the OAuth CSRF state token (strictly one-time use)
+   */
+  public static validateAndConsumeOAuthState(state: string | undefined): { isValid: boolean; userId?: string } {
+    if (!state || typeof state !== 'string') {
+      return { isValid: false };
+    }
+
+    const stateData = this.oauthStates.get(state);
+    if (!stateData) {
+      return { isValid: false };
+    }
+
+    // Always delete on first check to prevent replay attacks
+    this.oauthStates.delete(state);
+
+    const isExpired = Date.now() - stateData.createdAt > 15 * 60 * 1000;
+    if (isExpired) {
+      return { isValid: false };
+    }
+
+    return { isValid: true, userId: stateData.userId };
+  }
 
   private static configFilePath = path.resolve(
     process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME ? '/tmp' : process.cwd(),
@@ -109,10 +159,15 @@ export class InstagramService {
     const appSecret = this.runtimeConfig.appSecret || process.env.META_APP_SECRET;
     const defaultBaseUrl = this.getPublicBaseUrl();
 
+    // Ensure redirectUri is an OAuth callback URL and not accidentally confused with a webhook URL
+    const envRedirect = process.env.META_REDIRECT_URI?.trim();
+    const runtimeRedirect = this.runtimeConfig.redirectUri?.trim();
+    const candidateRedirect = runtimeRedirect || envRedirect;
+
     const redirectUri =
-      this.runtimeConfig.redirectUri ||
-      process.env.META_REDIRECT_URI ||
-      `${defaultBaseUrl}/api/instagram/callback`;
+      candidateRedirect && !candidateRedirect.includes('/webhooks')
+        ? candidateRedirect
+        : `${defaultBaseUrl}/api/instagram/callback`;
 
     const verifyToken =
       this.runtimeConfig.verifyToken ||
@@ -177,100 +232,126 @@ export class InstagramService {
   }
 
   /**
-   * Generates official Meta OAuth Authorization URL (Facebook / Meta Dialog)
+   * Generates official Instagram OAuth Authorization URL
+   * Customer-facing connection uses ONLY Direct Instagram Login flow.
    */
-  static getOAuthAuthorizeUrl(state?: string): { url: string; isConfigured: boolean } {
-    const config = this.getConfigStatus();
-    if (!config.appIdConfigured) {
-      return {
-        url: '#requires-meta-config',
-        isConfigured: false,
-      };
-    }
-
-    const params = new URLSearchParams({
-      client_id: process.env.META_APP_ID || '',
-      redirect_uri: config.redirectUri || '',
-      scope: this.REQUIRED_SCOPES,
-      response_type: 'code',
-      state: state || 'instaflow_auth_state',
-    });
-
-    return {
-      url: `${this.OAUTH_DIALOG_URL}?${params.toString()}`,
-      isConfigured: true,
-    };
+  static getOAuthAuthorizeUrl(stateOrUserId?: string): { url: string; isConfigured: boolean; state?: string } {
+    return this.getInstagramDirectLoginUrl(stateOrUserId);
   }
 
   /**
    * Generates direct Instagram Login URL (Users log in with Instagram Username & Password directly)
    */
-  static getInstagramDirectLoginUrl(state?: string): { url: string; isConfigured: boolean } {
+  static getInstagramDirectLoginUrl(stateOrUserId?: string): { url: string; isConfigured: boolean; state?: string } {
     const config = this.getConfigStatus();
-    if (!config.appIdConfigured) {
+    const clientId = config.appId || process.env.META_APP_ID || '';
+    if (!config.appIdConfigured || !clientId) {
       return {
         url: '#requires-meta-config',
         isConfigured: false,
       };
     }
 
+    const state = stateOrUserId && stateOrUserId.startsWith('ig_')
+      ? stateOrUserId
+      : this.createOAuthState(stateOrUserId);
+
     const params = new URLSearchParams({
-      client_id: process.env.META_APP_ID || '',
+      client_id: clientId,
       redirect_uri: config.redirectUri || '',
-      scope: this.REQUIRED_SCOPES,
       response_type: 'code',
+      scope: this.REQUIRED_SCOPES,
+      state,
       enable_fb_login: '0',
       force_authentication: '1',
-      state: state || 'instaflow_ig_direct',
     });
 
     return {
-      url: `https://www.instagram.com/oauth/authorize?${params.toString()}`,
+      url: `https://api.instagram.com/oauth/authorize?${params.toString()}`,
       isConfigured: true,
+      state,
     };
   }
 
   /**
-   * Exchange OAuth authorization code for an Instagram Access Token
+   * Exchange OAuth authorization code for an Instagram Access Token (short-lived),
+   * then exchange for a long-lived 60-day token using Meta's Instagram Login procedure.
+   * Never exposes or logs raw tokens.
    */
-  static async exchangeCodeForToken(code: string): Promise<{
+  static async exchangeCodeForToken(rawCode: string): Promise<{
     accessToken?: string;
     expiresIn?: number;
     error?: string;
   }> {
     const config = this.getConfigStatus();
-    if (!config.appIdConfigured || !config.appSecretConfigured) {
+    const clientId = config.appId || process.env.META_APP_ID || '';
+    const clientSecret = this.runtimeConfig.appSecret || process.env.META_APP_SECRET || '';
+
+    if (!config.appIdConfigured || !config.appSecretConfigured || !clientId || !clientSecret) {
       return {
-        error: 'Requires Meta Developer configuration: META_APP_ID and META_APP_SECRET must be set in environment secrets.',
+        error: 'Requires Meta Developer configuration: META_APP_ID and META_APP_SECRET must be configured.',
       };
     }
 
+    // Sanitize authorization code (remove trailing #_ if present)
+    const code = rawCode.replace(/#_$/, '').trim();
+
     try {
-      const tokenUrl = `${this.GRAPH_API_BASE}/oauth/access_token`;
+      const tokenUrl = 'https://api.instagram.com/oauth/access_token';
+      const bodyParams = new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'authorization_code',
+        redirect_uri: config.redirectUri || '',
+        code,
+      });
+
+      LoggingService.info('Exchanging Instagram authorization code with https://api.instagram.com/oauth/access_token');
       const response = await fetch(tokenUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          client_id: process.env.META_APP_ID || '',
-          client_secret: process.env.META_APP_SECRET || '',
-          redirect_uri: config.redirectUri || '',
-          code,
-        }),
+        body: bodyParams.toString(),
       });
 
       const data = await response.json();
-      if (!response.ok || data.error) {
-        LoggingService.error('Meta OAuth token exchange failed', data.error);
-        return { error: data.error?.message || 'Meta OAuth token exchange failed' };
+      if (!response.ok || data.error || !data.access_token) {
+        const errorMsg = data.error?.message || data.error_message || 'Meta Instagram OAuth token exchange failed';
+        LoggingService.error('Meta Instagram OAuth token exchange failed', errorMsg);
+        return { error: errorMsg };
+      }
+
+      const shortLivedToken: string = data.access_token;
+      let finalToken: string = shortLivedToken;
+      let expiresIn: number = data.expires_in || 3600;
+
+      // Exchange short-lived token for long-lived Instagram token (~60 days)
+      try {
+        const longLivedUrl = new URL('https://graph.instagram.com/access_token');
+        longLivedUrl.searchParams.set('grant_type', 'ig_exchange_token');
+        longLivedUrl.searchParams.set('client_secret', clientSecret);
+        longLivedUrl.searchParams.set('access_token', shortLivedToken);
+
+        const longLivedRes = await fetch(longLivedUrl.toString(), { method: 'GET' });
+        const longLivedData = await longLivedRes.json();
+
+        if (longLivedRes.ok && longLivedData?.access_token) {
+          finalToken = longLivedData.access_token;
+          expiresIn = longLivedData.expires_in || 5184000;
+          LoggingService.info(`✓ Exchanged short-lived token for long-lived Instagram token (expires in ${Math.round(expiresIn / 86400)} days)`);
+        } else {
+          LoggingService.warn('Could not exchange for long-lived token, keeping short-lived token');
+        }
+      } catch (err: any) {
+        LoggingService.warn('Exception during long-lived token exchange, keeping short-lived token', err?.message);
       }
 
       return {
-        accessToken: data.access_token,
-        expiresIn: data.expires_in,
+        accessToken: finalToken,
+        expiresIn,
       };
-    } catch (err) {
-      LoggingService.error('Network failure during Meta OAuth token exchange', err);
-      return { error: 'Network error connecting to Meta Graph API.' };
+    } catch (err: any) {
+      LoggingService.error('Network failure during Meta Instagram OAuth token exchange', err?.message);
+      return { error: 'Network error connecting to Meta Instagram OAuth API.' };
     }
   }
 

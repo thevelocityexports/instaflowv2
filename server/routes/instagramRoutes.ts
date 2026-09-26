@@ -103,7 +103,11 @@ router.post('/config', (req, res): void => {
 router.get('/accounts', AuthService.requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const accounts = await databaseService.getInstagramAccounts(req.user!.id);
-    res.json({ accounts });
+    const sanitizedAccounts = accounts.map(({ accessToken, ...rest }) => ({
+      ...rest,
+      hasAccessToken: Boolean(accessToken),
+    }));
+    res.json({ accounts: sanitizedAccounts });
   } catch (err) {
     LoggingService.error('Error fetching Instagram accounts', err);
     res.status(500).json({ error: 'Failed to retrieve Instagram accounts' });
@@ -139,13 +143,13 @@ router.post('/sync-comments', async (req: AuthenticatedRequest, res: Response): 
 
 /**
  * GET /api/instagram/connect
- * Initiates Meta OAuth flow by redirecting to Meta OAuth dialog
+ * Initiates Direct Instagram Login Flow (Customer-facing Connect Instagram)
  */
 router.get('/connect', async (req, res): Promise<void> => {
   try {
     const user = await AuthService.resolveUser(req);
     const userId = user ? user.id : 'usr_default_01';
-    const { url, isConfigured } = InstagramService.getOAuthAuthorizeUrl(`user_${userId}`);
+    const { url, isConfigured } = InstagramService.getInstagramDirectLoginUrl(userId);
 
     if (!isConfigured) {
       res.redirect('/?tab=instagram&meta_error=missing_credentials');
@@ -153,21 +157,21 @@ router.get('/connect', async (req, res): Promise<void> => {
     }
 
     res.redirect(url);
-  } catch (err) {
-    LoggingService.error('Error generating Instagram OAuth URL', err);
+  } catch (err: any) {
+    LoggingService.error('Error generating Instagram OAuth URL', err?.message);
     res.redirect('/?tab=instagram&error=Failed+to+initiate+Instagram+connection');
   }
 });
 
 /**
  * GET /api/instagram/connect-ig
- * Initiates Direct Instagram Login Flow (Matches Manychat Screenshot 3 & 4)
+ * Initiates Direct Instagram Login Flow
  */
 router.get('/connect-ig', async (req, res): Promise<void> => {
   try {
     const user = await AuthService.resolveUser(req);
     const userId = user ? user.id : 'usr_default_01';
-    const { url, isConfigured } = InstagramService.getInstagramDirectLoginUrl(`user_${userId}`);
+    const { url, isConfigured } = InstagramService.getInstagramDirectLoginUrl(userId);
 
     if (!isConfigured) {
       res.redirect('/?tab=instagram&meta_error=missing_credentials');
@@ -175,8 +179,8 @@ router.get('/connect-ig', async (req, res): Promise<void> => {
     }
 
     res.redirect(url);
-  } catch (err) {
-    LoggingService.error('Error generating Instagram Direct Login URL', err);
+  } catch (err: any) {
+    LoggingService.error('Error generating Instagram Direct Login URL', err?.message);
     res.redirect('/?tab=instagram&error=Failed+to+initiate+Instagram+connection');
   }
 });
@@ -184,13 +188,28 @@ router.get('/connect-ig', async (req, res): Promise<void> => {
 /**
  * GET /api/instagram/callback
  * Handles OAuth redirect from Meta / Instagram Login
+ * Validates CSRF state and fetches profile using graph.instagram.com
  */
 router.get('/callback', async (req, res): Promise<void> => {
-  const { code, error, error_description } = req.query;
+  const { code, state, error, error_description } = req.query;
 
   if (error) {
     LoggingService.error(`Meta OAuth callback returned error: ${error}`, error_description);
     res.redirect(`/?tab=instagram&error=${encodeURIComponent(String(error_description || error))}`);
+    return;
+  }
+
+  // Security: CSRF state validation
+  if (!state || typeof state !== 'string') {
+    LoggingService.error('Meta OAuth callback missing CSRF state parameter');
+    res.redirect('/?tab=instagram&error=Security+validation+failed:+Missing+OAuth+state');
+    return;
+  }
+
+  const stateValidation = InstagramService.validateAndConsumeOAuthState(state);
+  if (!stateValidation.isValid) {
+    LoggingService.error('Meta OAuth callback invalid or expired CSRF state');
+    res.redirect('/?tab=instagram&error=Security+validation+failed:+Invalid+or+expired+OAuth+session');
     return;
   }
 
@@ -211,21 +230,35 @@ router.get('/callback', async (req, res): Promise<void> => {
     let igUsername = 'connected_user';
     let igName = 'Instagram Account';
     let igUserId = `ig_${Date.now()}`;
+    let igAccountType: string | undefined = undefined;
 
-    // Attempt fetching user profile info with the new access token
+    // Profile lookup using official Instagram API (graph.instagram.com), NOT graph.facebook.com
     try {
-      const meRes = await fetch(`https://graph.facebook.com/v21.0/me?fields=id,name,username&access_token=${accessToken}`);
-      if (meRes.ok) {
-        const meData = await meRes.json();
-        if (meData.username) igUsername = meData.username;
-        if (meData.name) igName = meData.name;
-        if (meData.id) igUserId = meData.id;
+      const igCandidateUrls = [
+        `https://graph.instagram.com/v21.0/me?fields=id,username,account_type&access_token=${encodeURIComponent(accessToken)}`,
+        `https://graph.instagram.com/me?fields=id,username,account_type&access_token=${encodeURIComponent(accessToken)}`,
+      ];
+
+      for (const igUrl of igCandidateUrls) {
+        const meRes = await fetch(igUrl);
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData?.id) igUserId = meData.id;
+          if (meData?.username) {
+            igUsername = meData.username;
+            igName = `@${meData.username}`;
+          }
+          if (meData?.account_type) {
+            igAccountType = meData.account_type;
+          }
+          break;
+        }
       }
-    } catch (e) {
-      LoggingService.warn('Could not query /me on Meta Graph API, using defaults', e);
+    } catch (e: any) {
+      LoggingService.warn('Could not query Instagram /me endpoint for profile metadata', e?.message);
     }
 
-    const userId = 'usr_default_01';
+    const userId = stateValidation.userId || 'usr_default_01';
     const savedAccount = await databaseService.upsertInstagramAccount(userId, {
       username: igUsername,
       name: igName,
@@ -233,7 +266,21 @@ router.get('/callback', async (req, res): Promise<void> => {
       accessToken,
     });
 
-    // Return popup close script with postMessage (for smooth Manychat-style popup flow)
+    // Sanitized account payload for client-side postMessage (NEVER expose accessToken)
+    const sanitizedAccount = {
+      id: savedAccount.id,
+      userId: savedAccount.userId,
+      instagramUserId: savedAccount.instagramUserId,
+      username: savedAccount.username,
+      name: savedAccount.name,
+      profilePictureUrl: savedAccount.profilePictureUrl,
+      accountType: igAccountType,
+      isConnected: savedAccount.isConnected,
+      connectedAt: savedAccount.connectedAt,
+      updatedAt: savedAccount.updatedAt,
+    };
+
+    // Return popup close script with postMessage (for smooth popup flow)
     const htmlResponse = `
       <!DOCTYPE html>
       <html>
@@ -242,11 +289,11 @@ router.get('/callback', async (req, res): Promise<void> => {
           <div style="text-align: center; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
             <div style="font-size: 40px; margin-bottom: 12px;">✅</div>
             <h2 style="margin: 0 0 8px; color: #111827;">Connected Successfully!</h2>
-            <p style="margin: 0; color: #6b7280; font-size: 14px;">Your Instagram account @${savedAccount.username} is connected. Closing this window...</p>
+            <p style="margin: 0; color: #6b7280; font-size: 14px;">Your Instagram account @${sanitizedAccount.username} is connected. Closing this window...</p>
           </div>
           <script>
             if (window.opener) {
-              window.opener.postMessage({ type: 'INSTAGRAM_CONNECTED', account: ${JSON.stringify(savedAccount)} }, '*');
+              window.opener.postMessage({ type: 'INSTAGRAM_CONNECTED', account: ${JSON.stringify(sanitizedAccount)} }, '*');
               setTimeout(function() { window.close(); }, 800);
             } else {
               setTimeout(function() { window.location.href = '/?tab=instagram&connected=true'; }, 1000);
@@ -257,8 +304,8 @@ router.get('/callback', async (req, res): Promise<void> => {
     `;
 
     res.send(htmlResponse);
-  } catch (err) {
-    LoggingService.error('Failed processing Instagram OAuth callback', err);
+  } catch (err: any) {
+    LoggingService.error('Failed processing Instagram OAuth callback', err?.message);
     res.redirect('/?tab=instagram&error=Failed+to+complete+Instagram+OAuth+connection');
   }
 });
