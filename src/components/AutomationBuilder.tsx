@@ -58,11 +58,12 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const activeUsername =
     connectedAccount?.username ||
     connectedAccountUsername ||
-    'thevelocityexports';
+    '';
 
   const activeName =
     connectedAccount?.name ||
-    'Velocity Exports';
+    connectedAccount?.username ||
+    'Instagram Account';
 
   // Name
   const [name, setName] = useState(
@@ -72,7 +73,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   // Live Media State (starts from cached synced reels, defaults to empty array)
   const [liveMedia, setLiveMedia] = useState<InstagramMediaItem[]>(() => {
     try {
-      const active = localStorage.getItem('instaflow_active_reels') || localStorage.getItem(`instaflow_media_${activeUsername}`);
+      const active = localStorage.getItem('instaflow_active_reels') || (activeUsername ? localStorage.getItem(`instaflow_media_${activeUsername}`) : null);
       if (active) {
         const parsed = JSON.parse(active);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -100,7 +101,7 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
   const [keywords, setKeywords] = useState<string[]>(
     initialData?.keywords && initialData.keywords.length > 0 && initialData.keywords[0] !== '*'
       ? initialData.keywords
-      : ['Catalog', 'Price', 'FOB', 'MOQ', 'Export', 'Order']
+      : ['Catalog', 'Price', 'Info', 'Link', 'Details', 'Order']
   );
   const [keywordInput, setKeywordInput] = useState('');
 
@@ -110,28 +111,28 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
     existingPublicReply ? existingPublicReply.isEnabled : false
   );
   const [publicReplyText, setPublicReplyText] = useState(
-    existingPublicReply?.messageTemplate || 'Thanks for reaching out! 👋 We just sent our export catalog and FOB price sheet to your DM ✈️'
+    existingPublicReply?.messageTemplate || 'Thanks for reaching out! 👋 We just sent the link and details to your DM 📩'
   );
 
   // Step 4: "They will get"
   const existingPrivateDM = initialData?.actions?.find((a) => a.actionType === 'private_dm');
   const [enableOpeningDM, setEnableOpeningDM] = useState(true);
   const [openingDMText, setOpeningDMText] = useState(
-    "Hello! Welcome to Velocity Exports 🚢\n\nClick below to download our international export catalog and current container FOB pricing ✨"
+    "Hello! 👋\n\nClick below to access our information and details ✨"
   );
-  const [openingDMButtonText, setOpeningDMButtonText] = useState('Download Catalog');
+  const [openingDMButtonText, setOpeningDMButtonText] = useState('View Details');
 
   // Step 5: "And then, they will get"
   const [enableLinkDM, setEnableLinkDM] = useState(true);
   const [linkDMText, setLinkDMText] = useState(
     existingPrivateDM?.messageTemplate ||
-      `📦 **Velocity Exports Global Catalog & FOB Pricing** ✈️\n\nThank you for your interest! We deliver certified high-grade export consignments worldwide with complete customs clearance and port tracking.\n\n🌐 **Product Catalog & Minimum Order Quantities:**\nClick below to access our full specifications and shipping schedules.\n\n📞 **International Trade Desk:**\nexport@thevelocityexports.com`
+      `👋 **Here is the link you requested!** ✨\n\nThank you for reaching out! Click the link below to access our information.\n\n📞 Feel free to reply here if you have any questions!`
   );
   const [linkButtonText, setLinkButtonText] = useState(
-    existingPrivateDM?.linkButtonText || 'View Product Catalog'
+    existingPrivateDM?.linkButtonText || 'Open Link'
   );
   const [linkUrl, setLinkUrl] = useState(
-    existingPrivateDM?.linkUrl || 'https://thevelocityexports.com/catalog'
+    existingPrivateDM?.linkUrl || 'https://example.com'
   );
   const [followUpIfNotClicked, setFollowUpIfNotClicked] = useState(false);
 

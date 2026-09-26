@@ -142,12 +142,12 @@ export class DatabaseService {
   }
 
   private seedDefaultData() {
-    const adminEmail = 'thevelocityexports@gmail.com';
+    const adminEmail = 'admin@instaflow.app';
     const defaultUser: User = {
       id: toValidUuid(adminEmail),
       email: adminEmail,
-      fullName: 'Velocity Exports Admin',
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+      fullName: 'Admin User',
+      avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=Admin`,
       createdAt: new Date().toISOString(),
     };
     this.users.set(defaultUser.id, defaultUser);

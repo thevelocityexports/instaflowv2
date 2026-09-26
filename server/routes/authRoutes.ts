@@ -147,8 +147,9 @@ router.post(['/login', '/signin'], async (req: Request, res: Response): Promise<
 /**
  * POST /api/auth/google
  */
-router.post('/google', async (_req: Request, res: Response): Promise<void> => {
-  const defaultUser = await databaseService.getUserByEmail('thevelocityexports@gmail.com');
+router.post('/google', async (req: Request, res: Response): Promise<void> => {
+  const email = (req.body?.email as string) || 'admin@instaflow.app';
+  const defaultUser = await databaseService.getUserByEmail(email) || await databaseService.getUser('usr_default_01');
   if (defaultUser) {
     const { password, ...safeUser } = defaultUser;
     res.json({

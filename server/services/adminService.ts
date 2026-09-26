@@ -13,7 +13,7 @@ export class AdminService {
    */
   static async isPlatformAdmin(userId: string, email?: string): Promise<boolean> {
     const cleanEmail = email?.toLowerCase().trim();
-    if (cleanEmail === 'thevelocityexports@gmail.com' || cleanEmail?.includes('admin')) {
+    if (cleanEmail?.includes('admin')) {
       return true;
     }
 

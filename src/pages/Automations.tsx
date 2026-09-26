@@ -141,8 +141,19 @@ export const Automations: React.FC<AutomationsProps> = ({
         {connectedAccount && (
           <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/80">
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-purple-600 to-pink-500 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
-                {(connectedAccount.name || connectedAccount.username || 'IG').slice(0, 2).toUpperCase()}
+              <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-purple-600 to-pink-500 text-white flex items-center justify-center text-[10px] font-bold shrink-0 overflow-hidden">
+                {connectedAccount.profilePictureUrl ? (
+                  <img
+                    src={connectedAccount.profilePictureUrl}
+                    alt={connectedAccount.username}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <span>{(connectedAccount.name || connectedAccount.username || 'IG').slice(0, 2).toUpperCase()}</span>
+                )}
               </div>
               <div className="min-w-0 flex-1">
                 <span className="text-[11px] font-bold text-slate-800 truncate block">

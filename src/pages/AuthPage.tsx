@@ -86,7 +86,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
     setErrorMessage(null);
     try {
       const res = await ApiClient.signIn({
-        email: 'thevelocityexports@gmail.com',
+        email: 'admin@instaflow.app',
         password: 'password123',
       });
       if (res.success && res.user) {

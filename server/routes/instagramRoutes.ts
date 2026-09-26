@@ -1296,7 +1296,7 @@ router.get(
         targetAccount = allAccs.find((a) => a.isConnected) || allAccs[0] || null;
       }
 
-      const accountHandle = (targetAccount?.username || (typeof req.query.username === 'string' ? req.query.username : '') || 'thevelocityexports').replace(/^@/, '');
+      const accountHandle = (targetAccount?.username || (typeof req.query.username === 'string' ? req.query.username : '') || '').replace(/^@/, '');
 
       // 1. Check if cached live media is already in database memory
       const cached = (await databaseService.getCachedMedia(accountHandle)) || (targetAccount ? await databaseService.getCachedMedia(targetAccount.id) : null);
@@ -1376,7 +1376,7 @@ router.post(
       const user = await AuthService.resolveUser(req);
       const userId = user ? user.id : 'usr_default_01';
       const account = await databaseService.getConnectedInstagramAccount(userId);
-      const username = account?.username || 'thevelocityexports';
+      const username = account?.username || 'instagram_user';
 
       const importedReel: InstagramMediaItem = {
         id: `reel_${code}`,

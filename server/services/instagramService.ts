@@ -1113,7 +1113,7 @@ export class InstagramService {
     }
 
     let finalUsername = cleanUsername;
-    let finalName = username || 'Velocity Exports';
+    let finalName = username || 'Instagram Account';
     let finalId = instagramUserId && /^\d+$/.test(instagramUserId.trim()) ? instagramUserId.trim() : '';
     let profilePictureUrl: string | undefined = undefined;
     let followersCount = 0;
@@ -1244,10 +1244,10 @@ export class InstagramService {
 
     // Default fallbacks if Meta hasn't returned username
     if (!finalUsername) {
-      finalUsername = username || 'thevelocityexports';
+      finalUsername = username || 'instagram_user';
     }
     if (!finalName) {
-      finalName = finalUsername === 'thevelocityexports' ? 'Velocity Exports' : finalUsername;
+      finalName = username || 'Instagram Account';
     }
     if (!finalId) {
       finalId = `ig_${finalUsername}`;

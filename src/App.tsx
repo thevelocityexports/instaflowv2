@@ -385,7 +385,7 @@ export default function App() {
                 }}
                 onCancel={() => setAutomationsView('list')}
                 connectedAccount={connectedAccount}
-                connectedAccountUsername={connectedAccount?.username || 'thevelocityexports'}
+                connectedAccountUsername={connectedAccount?.username || ''}
                 onNavigateToInstagram={() => setActiveTab('instagram')}
               />
             ) : (

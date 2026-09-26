@@ -96,10 +96,10 @@ export const TopBar: React.FC<TopBarProps> = ({
               <div className="absolute right-0 mt-1.5 w-64 bg-white rounded-xl border border-slate-200 shadow-lg p-2 z-30 space-y-1">
                 <div className="px-3 py-2 border-b border-slate-100">
                   <p className="text-xs font-semibold text-slate-900 truncate">
-                    {currentUser?.fullName || 'Vajra Makuta Admin'}
+                    {currentUser?.fullName || 'Workspace Admin'}
                   </p>
                   <p className="text-[11px] text-slate-400 truncate">
-                    {currentUser?.email || 'thevelocityexports@gmail.com'}
+                    {currentUser?.email || 'admin@instaflow.app'}
                   </p>
                 </div>
 

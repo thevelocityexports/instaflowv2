@@ -106,7 +106,7 @@ export class AuthService {
     }
 
     // 4. Default user fallback for background and development
-    const defaultUser = await databaseService.getUserByEmail('thevelocityexports@gmail.com');
+    const defaultUser = await databaseService.getUser('usr_default_01');
     if (defaultUser) {
       return defaultUser;
     }
