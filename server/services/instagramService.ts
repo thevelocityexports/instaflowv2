@@ -118,21 +118,37 @@ export class InstagramService {
     }
   }
 
+  public static readonly PRODUCTION_BASE_URL = 'https://instaflowv2.vercel.app';
+  public static readonly PRODUCTION_CALLBACK_URL = `${InstagramService.PRODUCTION_BASE_URL}/api/instagram/callback`;
+
   /**
-   * Determine primary public URL of the application
+   * Determine primary public URL of the application.
+   * Production uses https://instaflowv2.vercel.app.
+   * Never uses Google AI Studio run.app for production OAuth.
    */
   public static getPublicBaseUrl(): string {
-    if (process.env.APP_URL && !process.env.APP_URL.includes('localhost')) {
-      return process.env.APP_URL.replace(/\/$/, '');
+    const envAppUrl = process.env.APP_URL?.trim();
+
+    // 1. Explicit production APP_URL set via environment (excluding run.app dev preview)
+    if (envAppUrl && !envAppUrl.includes('localhost') && !envAppUrl.includes('.run.app')) {
+      return envAppUrl.replace(/\/$/, '');
     }
+
+    // 2. Vercel deployment variables
     if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
-      return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+      return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL.replace(/\/$/, '')}`;
     }
-    if (process.env.VERCEL_URL) {
-      return `https://${process.env.VERCEL_URL}`;
+    if (process.env.VERCEL_URL && !process.env.VERCEL_URL.includes('localhost') && !process.env.VERCEL_URL.includes('.run.app')) {
+      return `https://${process.env.VERCEL_URL.replace(/\/$/, '')}`;
     }
-    // Default to the live Cloud Run preview URL if on Cloud Run or dev environment
-    return 'https://ais-dev-6t2aafwrddbxusaemb5oqh-714931722661.asia-southeast1.run.app';
+
+    // 3. Localhost development support
+    if (envAppUrl && (envAppUrl.includes('localhost') || envAppUrl.includes('127.0.0.1'))) {
+      return envAppUrl.replace(/\/$/, '');
+    }
+
+    // 4. Default to official production Vercel URL
+    return this.PRODUCTION_BASE_URL;
   }
 
   public static getVerifyToken(): string {
@@ -159,15 +175,19 @@ export class InstagramService {
     const appSecret = this.runtimeConfig.appSecret || process.env.META_APP_SECRET;
     const defaultBaseUrl = this.getPublicBaseUrl();
 
-    // Ensure redirectUri is an OAuth callback URL and not accidentally confused with a webhook URL
+    // Ensure redirectUri is an OAuth callback URL and not accidentally confused with a webhook URL or dev preview URL
     const envRedirect = process.env.META_REDIRECT_URI?.trim();
     const runtimeRedirect = this.runtimeConfig.redirectUri?.trim();
     const candidateRedirect = runtimeRedirect || envRedirect;
 
-    const redirectUri =
-      candidateRedirect && !candidateRedirect.includes('/webhooks')
-        ? candidateRedirect
-        : `${defaultBaseUrl}/api/instagram/callback`;
+    let redirectUri = `${defaultBaseUrl}/api/instagram/callback`;
+    if (
+      candidateRedirect &&
+      !candidateRedirect.includes('/webhooks') &&
+      !candidateRedirect.includes('.run.app')
+    ) {
+      redirectUri = candidateRedirect;
+    }
 
     const verifyToken =
       this.runtimeConfig.verifyToken ||
