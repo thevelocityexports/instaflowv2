@@ -43,14 +43,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
 
-  const navItems = [
-    { id: 'automations' as NavTab, label: 'Automation', icon: GitBranch },
-    { id: 'instagram' as NavTab, label: 'Connect Instagram', icon: Instagram, highlight: true },
-    { id: 'home' as NavTab, label: 'Home', icon: Home },
-    { id: 'contacts' as NavTab, label: 'Contacts', icon: Users },
-    { id: 'ai' as NavTab, label: 'instaflow AI', icon: Bot },
-    { id: 'inbox' as NavTab, label: 'Inbox', icon: MessageCircle, badge: '1848' },
-    { id: 'settings' as NavTab, label: 'Settings', icon: Settings },
+  const navItems: Array<{
+    id: NavTab;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    highlight?: boolean;
+    badge?: string;
+  }> = [
+    { id: 'automations', label: 'Automation', icon: GitBranch },
+    { id: 'instagram', label: 'Connect Instagram', icon: Instagram, highlight: true },
+    { id: 'home', label: 'Home', icon: Home },
+    { id: 'contacts', label: 'Contacts', icon: Users },
+    { id: 'ai', label: 'instaflow AI', icon: Bot },
+    { id: 'inbox', label: 'Inbox', icon: MessageCircle },
+    { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   return (
@@ -92,41 +98,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#0066ff] shrink-0 ml-1" />
           </button>
         ) : (
-          /* Connected State: Shows Profile, Handle and PRO Badge */
+          /* Connected State: Shows Profile Picture, Handle, and Name */
           <div className="relative">
             <button
               onClick={() => setIsAccountMenuOpen(!isAccountMenuOpen)}
               className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 border border-slate-200/90 transition-all text-left group cursor-pointer"
               title="Manage connected Instagram account"
             >
-              <div className="flex items-center gap-2 min-w-0">
-                {/* Account Avatar with PRO Badge */}
-                <div className="relative shrink-0">
-                  {connectedAccount.profilePictureUrl ? (
-                    <img
-                      src={connectedAccount.profilePictureUrl}
-                      alt={connectedAccount.username}
-                      referrerPolicy="no-referrer"
-                      crossOrigin="anonymous"
-                      className="w-8 h-8 rounded-full object-cover border border-slate-200 shadow-xs"
-                      onError={(e) => {
-                        // Fallback to monogram if Instagram CDN URL expires
-                        e.currentTarget.style.display = 'none';
-                        const fallback = e.currentTarget.parentElement?.querySelector('.avatar-fallback') as HTMLElement;
-                        if (fallback) fallback.style.display = 'flex';
-                      }}
-                    />
-                  ) : null}
-                  <div
-                    className={`w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 via-pink-500 to-rose-500 items-center justify-center text-[10px] font-bold text-white shadow-xs avatar-fallback ${
-                      connectedAccount.profilePictureUrl ? 'hidden' : 'flex'
-                    }`}
-                  >
-                    {(connectedAccount.name || connectedAccount.username || 'IG').slice(0, 2).toUpperCase()}
-                  </div>
-                  <span className="absolute -bottom-1 -right-1 bg-[#0066ff] text-white text-[7px] font-black px-1 py-0.2 rounded-xs shadow-xs tracking-tighter">
-                    PRO
-                  </span>
+              <div className="flex items-center gap-2.5 min-w-0">
+                {/* Account Profile Picture */}
+                <div className="relative shrink-0 w-8 h-8 rounded-full overflow-hidden border border-slate-200 shadow-xs bg-slate-100 flex items-center justify-center">
+                  <img
+                    src={
+                      connectedAccount.profilePictureUrl ||
+                      `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+                        connectedAccount.name || connectedAccount.username || 'IG'
+                      )}`
+                    }
+                    alt={connectedAccount.username}
+                    referrerPolicy="no-referrer"
+                    crossOrigin="anonymous"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+                        connectedAccount.name || connectedAccount.username || 'IG'
+                      )}`;
+                    }}
+                  />
                 </div>
 
                 <div className="min-w-0 flex-1">
