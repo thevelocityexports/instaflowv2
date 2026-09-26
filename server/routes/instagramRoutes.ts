@@ -275,7 +275,8 @@ router.get('/connect', async (req, res): Promise<void> => {
   try {
     const user = await AuthService.resolveUser(req);
     const userId = user ? user.id : 'usr_default_01';
-    const { url, isConfigured, state } = InstagramService.getInstagramDirectLoginUrl(userId);
+    const redirectUri = InstagramService.getRedirectUri();
+    const { url, isConfigured, state } = InstagramService.getInstagramDirectLoginUrl(userId, redirectUri);
 
     if (!isConfigured) {
       res.redirect('/?tab=instagram&meta_error=missing_credentials');
@@ -308,7 +309,8 @@ router.get('/connect-ig', async (req, res): Promise<void> => {
   try {
     const user = await AuthService.resolveUser(req);
     const userId = user ? user.id : 'usr_default_01';
-    const { url, isConfigured, state } = InstagramService.getInstagramDirectLoginUrl(userId);
+    const redirectUri = InstagramService.getRedirectUri();
+    const { url, isConfigured, state } = InstagramService.getInstagramDirectLoginUrl(userId, redirectUri);
 
     if (!isConfigured) {
       res.redirect('/?tab=instagram&meta_error=missing_credentials');
@@ -352,10 +354,11 @@ router.post('/internal/exchange-code', async (req, res): Promise<void> => {
   try {
     const { code, state, redirectUri } = req.body || {};
 
-    // 1. Validate redirectUri strictly
-    const expectedRedirectUri = 'https://instaflowv2.vercel.app/api/instagram/callback';
-    if (!redirectUri || redirectUri !== expectedRedirectUri) {
-      LoggingService.warn('Internal exchange rejected: redirectUri mismatch');
+    // 1. Validate redirectUri strictly against canonical callback URI
+    const expectedRedirectUri = InstagramService.getRedirectUri();
+    const receivedRedirectUri = typeof redirectUri === 'string' ? redirectUri.trim().replace(/\/+$/, '') : '';
+    if (!receivedRedirectUri || receivedRedirectUri !== expectedRedirectUri) {
+      LoggingService.warn(`Internal exchange rejected: redirectUri mismatch. Received: "${redirectUri}", Expected: "${expectedRedirectUri}"`);
       res.status(400).json({
         success: false,
         error: 'Security validation failed: redirectUri does not match expected production callback URL',
@@ -383,9 +386,9 @@ router.post('/internal/exchange-code', async (req, res): Promise<void> => {
       return;
     }
 
-    // 4. State is valid and now consumed. Perform real token exchange via Meta
-    LoggingService.info('OAuth state verified. Initiating token exchange with Meta...');
-    const tokenResult = await InstagramService.exchangeCodeForToken(code);
+    // 4. State is valid and now consumed. Perform real token exchange via Meta using identical redirect_uri
+    LoggingService.info(`OAuth state verified. Initiating token exchange with Meta using redirect_uri=${expectedRedirectUri}...`);
+    const tokenResult = await InstagramService.exchangeCodeForToken(code, expectedRedirectUri);
 
     if (tokenResult.error || !tokenResult.accessToken) {
       LoggingService.error('Token exchange with Meta failed', tokenResult.error);
@@ -474,7 +477,7 @@ router.post('/internal/exchange-code', async (req, res): Promise<void> => {
 router.get('/callback', async (req, res): Promise<void> => {
   const { code, state, error, error_reason, error_description } = req.query;
   const currentUtcTimestamp = new Date().toUTCString();
-  const productionCallbackUrl = 'https://instaflowv2.vercel.app/api/instagram/callback';
+  const productionCallbackUrl = InstagramService.getRedirectUri();
 
   // 1. Handle error response returned by Meta
   if (error || error_reason || error_description) {
@@ -526,8 +529,8 @@ router.get('/callback', async (req, res): Promise<void> => {
 
   // 5. State verified! Perform real server-side token exchange directly on Vercel
   try {
-    LoggingService.info('OAuth state verified on Vercel. Initiating token exchange with Meta...');
-    const tokenResult = await InstagramService.exchangeCodeForToken(code.trim());
+    LoggingService.info(`OAuth state verified on Vercel. Initiating token exchange with Meta using redirect_uri=${productionCallbackUrl}...`);
+    const tokenResult = await InstagramService.exchangeCodeForToken(code.trim(), productionCallbackUrl);
 
     if (tokenResult.error || !tokenResult.accessToken) {
       LoggingService.error('Token exchange with Meta failed', tokenResult.error);

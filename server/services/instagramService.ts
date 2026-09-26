@@ -273,32 +273,60 @@ export class InstagramService {
   public static readonly PRODUCTION_CALLBACK_URL = `${InstagramService.PRODUCTION_BASE_URL}/api/instagram/callback`;
 
   /**
+   * Canonical redirect URI for Instagram OAuth.
+   * MUST consistently be https://instaflowv2.vercel.app/api/instagram/callback.
+   * Exactly matches between the authorize dialog request and the token exchange request.
+   */
+  public static getRedirectUri(override?: string): string {
+    if (override && typeof override === 'string' && override.trim()) {
+      return override.trim().replace(/\/+$/, '');
+    }
+
+    // Explicit override from environment if set, non-empty, and strictly valid
+    const envRedirect = process.env.META_REDIRECT_URI?.trim();
+    const runtimeRedirect = this.runtimeConfig.redirectUri?.trim();
+    const candidate = (runtimeRedirect || envRedirect)?.replace(/\/+$/, '');
+    if (candidate && !candidate.includes('/webhooks') && !candidate.includes('.run.app')) {
+      if (candidate.endsWith('/api/instagram/callback') || candidate.includes('instagram/callback')) {
+        return candidate;
+      }
+    }
+
+    // Localhost development support
+    const envAppUrl = process.env.APP_URL?.trim();
+    if (envAppUrl && (envAppUrl.includes('localhost') || envAppUrl.includes('127.0.0.1'))) {
+      return `${envAppUrl.replace(/\/+$/, '')}/api/instagram/callback`;
+    }
+
+    // Official canonical production callback URL
+    return this.PRODUCTION_CALLBACK_URL;
+  }
+
+  /**
    * Determine primary public URL of the application.
-   * Production uses https://instaflowv2.vercel.app.
-   * Never uses Google AI Studio run.app for production OAuth.
+   * Production canonical is https://instaflowv2.vercel.app.
    */
   public static getPublicBaseUrl(): string {
     const envAppUrl = process.env.APP_URL?.trim();
 
-    // 1. Explicit production APP_URL set via environment (excluding run.app dev preview)
+    // 1. Explicit production APP_URL set via environment (excluding run.app dev preview and localhost)
     if (envAppUrl && !envAppUrl.includes('localhost') && !envAppUrl.includes('.run.app')) {
-      return envAppUrl.replace(/\/$/, '');
+      return envAppUrl.replace(/\/+$/, '');
     }
 
-    // 2. Vercel deployment variables
-    if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
-      return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL.replace(/\/$/, '')}`;
-    }
-    if (process.env.VERCEL_URL && !process.env.VERCEL_URL.includes('localhost') && !process.env.VERCEL_URL.includes('.run.app')) {
-      return `https://${process.env.VERCEL_URL.replace(/\/$/, '')}`;
-    }
-
-    // 3. Localhost development support
+    // 2. Localhost development support
     if (envAppUrl && (envAppUrl.includes('localhost') || envAppUrl.includes('127.0.0.1'))) {
-      return envAppUrl.replace(/\/$/, '');
+      return envAppUrl.replace(/\/+$/, '');
     }
 
-    // 4. Default to official production Vercel URL
+    // 3. Vercel production project domain (if explicitly production)
+    if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+      return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL.replace(/\/+$/, '')}`;
+    }
+
+    // 4. Default to official canonical production Vercel URL
+    // (We intentionally avoid process.env.VERCEL_URL because on Vercel it evaluates to
+    // transient preview deployment hashes which break Meta OAuth redirect URI validation)
     return this.PRODUCTION_BASE_URL;
   }
 
@@ -326,19 +354,8 @@ export class InstagramService {
     const appSecret = this.runtimeConfig.appSecret || process.env.META_APP_SECRET;
     const defaultBaseUrl = this.getPublicBaseUrl();
 
-    // Ensure redirectUri is an OAuth callback URL and not accidentally confused with a webhook URL or dev preview URL
-    const envRedirect = process.env.META_REDIRECT_URI?.trim();
-    const runtimeRedirect = this.runtimeConfig.redirectUri?.trim();
-    const candidateRedirect = runtimeRedirect || envRedirect;
-
-    let redirectUri = `${defaultBaseUrl}/api/instagram/callback`;
-    if (
-      candidateRedirect &&
-      !candidateRedirect.includes('/webhooks') &&
-      !candidateRedirect.includes('.run.app')
-    ) {
-      redirectUri = candidateRedirect;
-    }
+    // Canonical redirect URI (strictly identical in authorize and exchange)
+    const redirectUri = this.getRedirectUri();
 
     const verifyToken =
       this.runtimeConfig.verifyToken ||
@@ -406,14 +423,14 @@ export class InstagramService {
    * Generates official Instagram OAuth Authorization URL
    * Customer-facing connection uses ONLY Direct Instagram Login flow.
    */
-  static getOAuthAuthorizeUrl(stateOrUserId?: string): { url: string; isConfigured: boolean; state?: string } {
-    return this.getInstagramDirectLoginUrl(stateOrUserId);
+  static getOAuthAuthorizeUrl(stateOrUserId?: string, redirectUriOverride?: string): { url: string; isConfigured: boolean; state?: string } {
+    return this.getInstagramDirectLoginUrl(stateOrUserId, redirectUriOverride);
   }
 
   /**
    * Generates direct Instagram Login URL (Users log in with Instagram Username & Password directly)
    */
-  static getInstagramDirectLoginUrl(stateOrUserId?: string): { url: string; isConfigured: boolean; state?: string } {
+  static getInstagramDirectLoginUrl(stateOrUserId?: string, redirectUriOverride?: string): { url: string; isConfigured: boolean; state?: string } {
     const config = this.getConfigStatus();
     const clientId = config.appId || process.env.META_APP_ID || '';
     if (!config.appIdConfigured || !clientId) {
@@ -427,9 +444,11 @@ export class InstagramService {
       ? stateOrUserId
       : this.createOAuthState(stateOrUserId);
 
+    const redirectUri = this.getRedirectUri(redirectUriOverride);
+
     const params = new URLSearchParams({
       client_id: clientId,
-      redirect_uri: config.redirectUri || '',
+      redirect_uri: redirectUri,
       response_type: 'code',
       scope: this.REQUIRED_SCOPES,
       state,
@@ -449,7 +468,7 @@ export class InstagramService {
    * then exchange for a long-lived 60-day token using Meta's Instagram Login procedure.
    * Never exposes or logs raw tokens.
    */
-  static async exchangeCodeForToken(rawCode: string): Promise<{
+  static async exchangeCodeForToken(rawCode: string, redirectUriOverride?: string): Promise<{
     accessToken?: string;
     expiresIn?: number;
     error?: string;
@@ -466,6 +485,7 @@ export class InstagramService {
 
     // Sanitize authorization code (remove trailing #_ if present)
     const code = rawCode.replace(/#_$/, '').trim();
+    const redirectUri = this.getRedirectUri(redirectUriOverride);
 
     try {
       const tokenUrl = 'https://api.instagram.com/oauth/access_token';
@@ -473,11 +493,11 @@ export class InstagramService {
         client_id: clientId,
         client_secret: clientSecret,
         grant_type: 'authorization_code',
-        redirect_uri: config.redirectUri || '',
+        redirect_uri: redirectUri,
         code,
       });
 
-      LoggingService.info('Exchanging Instagram authorization code with https://api.instagram.com/oauth/access_token');
+      LoggingService.info(`Exchanging Instagram authorization code with ${tokenUrl} using redirect_uri=${redirectUri}`);
       const response = await fetch(tokenUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

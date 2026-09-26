@@ -1434,23 +1434,42 @@ var init_instagramService = __esm({
         this.PRODUCTION_CALLBACK_URL = `${_InstagramService.PRODUCTION_BASE_URL}/api/instagram/callback`;
       }
       /**
+       * Canonical redirect URI for Instagram OAuth.
+       * MUST consistently be https://instaflowv2.vercel.app/api/instagram/callback.
+       * Exactly matches between the authorize dialog request and the token exchange request.
+       */
+      static getRedirectUri(override) {
+        if (override && typeof override === "string" && override.trim()) {
+          return override.trim().replace(/\/+$/, "");
+        }
+        const envRedirect = process.env.META_REDIRECT_URI?.trim();
+        const runtimeRedirect = this.runtimeConfig.redirectUri?.trim();
+        const candidate = (runtimeRedirect || envRedirect)?.replace(/\/+$/, "");
+        if (candidate && !candidate.includes("/webhooks") && !candidate.includes(".run.app")) {
+          if (candidate.endsWith("/api/instagram/callback") || candidate.includes("instagram/callback")) {
+            return candidate;
+          }
+        }
+        const envAppUrl = process.env.APP_URL?.trim();
+        if (envAppUrl && (envAppUrl.includes("localhost") || envAppUrl.includes("127.0.0.1"))) {
+          return `${envAppUrl.replace(/\/+$/, "")}/api/instagram/callback`;
+        }
+        return this.PRODUCTION_CALLBACK_URL;
+      }
+      /**
        * Determine primary public URL of the application.
-       * Production uses https://instaflowv2.vercel.app.
-       * Never uses Google AI Studio run.app for production OAuth.
+       * Production canonical is https://instaflowv2.vercel.app.
        */
       static getPublicBaseUrl() {
         const envAppUrl = process.env.APP_URL?.trim();
         if (envAppUrl && !envAppUrl.includes("localhost") && !envAppUrl.includes(".run.app")) {
-          return envAppUrl.replace(/\/$/, "");
-        }
-        if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
-          return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL.replace(/\/$/, "")}`;
-        }
-        if (process.env.VERCEL_URL && !process.env.VERCEL_URL.includes("localhost") && !process.env.VERCEL_URL.includes(".run.app")) {
-          return `https://${process.env.VERCEL_URL.replace(/\/$/, "")}`;
+          return envAppUrl.replace(/\/+$/, "");
         }
         if (envAppUrl && (envAppUrl.includes("localhost") || envAppUrl.includes("127.0.0.1"))) {
-          return envAppUrl.replace(/\/$/, "");
+          return envAppUrl.replace(/\/+$/, "");
+        }
+        if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+          return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL.replace(/\/+$/, "")}`;
         }
         return this.PRODUCTION_BASE_URL;
       }
@@ -1475,13 +1494,7 @@ var init_instagramService = __esm({
         const appId = this.runtimeConfig.appId || process.env.META_APP_ID;
         const appSecret = this.runtimeConfig.appSecret || process.env.META_APP_SECRET;
         const defaultBaseUrl = this.getPublicBaseUrl();
-        const envRedirect = process.env.META_REDIRECT_URI?.trim();
-        const runtimeRedirect = this.runtimeConfig.redirectUri?.trim();
-        const candidateRedirect = runtimeRedirect || envRedirect;
-        let redirectUri = `${defaultBaseUrl}/api/instagram/callback`;
-        if (candidateRedirect && !candidateRedirect.includes("/webhooks") && !candidateRedirect.includes(".run.app")) {
-          redirectUri = candidateRedirect;
-        }
+        const redirectUri = this.getRedirectUri();
         const verifyToken = this.runtimeConfig.verifyToken || process.env.META_VERIFY_TOKEN || "instaflow_verify_secret";
         const webhookCallbackUrl = this.runtimeConfig.webhookCallbackUrl || `${defaultBaseUrl}/api/webhooks/instagram`;
         const isAppIdSet = Boolean(appId && !appId.includes("MY_META") && appId.trim().length > 3);
@@ -1531,13 +1544,13 @@ var init_instagramService = __esm({
        * Generates official Instagram OAuth Authorization URL
        * Customer-facing connection uses ONLY Direct Instagram Login flow.
        */
-      static getOAuthAuthorizeUrl(stateOrUserId) {
-        return this.getInstagramDirectLoginUrl(stateOrUserId);
+      static getOAuthAuthorizeUrl(stateOrUserId, redirectUriOverride) {
+        return this.getInstagramDirectLoginUrl(stateOrUserId, redirectUriOverride);
       }
       /**
        * Generates direct Instagram Login URL (Users log in with Instagram Username & Password directly)
        */
-      static getInstagramDirectLoginUrl(stateOrUserId) {
+      static getInstagramDirectLoginUrl(stateOrUserId, redirectUriOverride) {
         const config = this.getConfigStatus();
         const clientId = config.appId || process.env.META_APP_ID || "";
         if (!config.appIdConfigured || !clientId) {
@@ -1547,9 +1560,10 @@ var init_instagramService = __esm({
           };
         }
         const state = stateOrUserId && stateOrUserId.startsWith("ig_") ? stateOrUserId : this.createOAuthState(stateOrUserId);
+        const redirectUri = this.getRedirectUri(redirectUriOverride);
         const params = new URLSearchParams({
           client_id: clientId,
-          redirect_uri: config.redirectUri || "",
+          redirect_uri: redirectUri,
           response_type: "code",
           scope: this.REQUIRED_SCOPES,
           state,
@@ -1567,7 +1581,7 @@ var init_instagramService = __esm({
        * then exchange for a long-lived 60-day token using Meta's Instagram Login procedure.
        * Never exposes or logs raw tokens.
        */
-      static async exchangeCodeForToken(rawCode) {
+      static async exchangeCodeForToken(rawCode, redirectUriOverride) {
         const config = this.getConfigStatus();
         const clientId = config.appId || process.env.META_APP_ID || "";
         const clientSecret = this.runtimeConfig.appSecret || process.env.META_APP_SECRET || "";
@@ -1577,16 +1591,17 @@ var init_instagramService = __esm({
           };
         }
         const code = rawCode.replace(/#_$/, "").trim();
+        const redirectUri = this.getRedirectUri(redirectUriOverride);
         try {
           const tokenUrl = "https://api.instagram.com/oauth/access_token";
           const bodyParams = new URLSearchParams({
             client_id: clientId,
             client_secret: clientSecret,
             grant_type: "authorization_code",
-            redirect_uri: config.redirectUri || "",
+            redirect_uri: redirectUri,
             code
           });
-          LoggingService.info("Exchanging Instagram authorization code with https://api.instagram.com/oauth/access_token");
+          LoggingService.info(`Exchanging Instagram authorization code with ${tokenUrl} using redirect_uri=${redirectUri}`);
           const response = await fetch(tokenUrl, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -3264,7 +3279,8 @@ router2.get("/connect", async (req, res) => {
   try {
     const user = await AuthService.resolveUser(req);
     const userId = user ? user.id : "usr_default_01";
-    const { url, isConfigured, state } = InstagramService.getInstagramDirectLoginUrl(userId);
+    const redirectUri = InstagramService.getRedirectUri();
+    const { url, isConfigured, state } = InstagramService.getInstagramDirectLoginUrl(userId, redirectUri);
     if (!isConfigured) {
       res.redirect("/?tab=instagram&meta_error=missing_credentials");
       return;
@@ -3288,7 +3304,8 @@ router2.get("/connect-ig", async (req, res) => {
   try {
     const user = await AuthService.resolveUser(req);
     const userId = user ? user.id : "usr_default_01";
-    const { url, isConfigured, state } = InstagramService.getInstagramDirectLoginUrl(userId);
+    const redirectUri = InstagramService.getRedirectUri();
+    const { url, isConfigured, state } = InstagramService.getInstagramDirectLoginUrl(userId, redirectUri);
     if (!isConfigured) {
       res.redirect("/?tab=instagram&meta_error=missing_credentials");
       return;
@@ -3311,9 +3328,10 @@ router2.get("/connect-ig", async (req, res) => {
 router2.post("/internal/exchange-code", async (req, res) => {
   try {
     const { code, state, redirectUri } = req.body || {};
-    const expectedRedirectUri = "https://instaflowv2.vercel.app/api/instagram/callback";
-    if (!redirectUri || redirectUri !== expectedRedirectUri) {
-      LoggingService.warn("Internal exchange rejected: redirectUri mismatch");
+    const expectedRedirectUri = InstagramService.getRedirectUri();
+    const receivedRedirectUri = typeof redirectUri === "string" ? redirectUri.trim().replace(/\/+$/, "") : "";
+    if (!receivedRedirectUri || receivedRedirectUri !== expectedRedirectUri) {
+      LoggingService.warn(`Internal exchange rejected: redirectUri mismatch. Received: "${redirectUri}", Expected: "${expectedRedirectUri}"`);
       res.status(400).json({
         success: false,
         error: "Security validation failed: redirectUri does not match expected production callback URL"
@@ -3336,8 +3354,8 @@ router2.post("/internal/exchange-code", async (req, res) => {
       });
       return;
     }
-    LoggingService.info("OAuth state verified. Initiating token exchange with Meta...");
-    const tokenResult = await InstagramService.exchangeCodeForToken(code);
+    LoggingService.info(`OAuth state verified. Initiating token exchange with Meta using redirect_uri=${expectedRedirectUri}...`);
+    const tokenResult = await InstagramService.exchangeCodeForToken(code, expectedRedirectUri);
     if (tokenResult.error || !tokenResult.accessToken) {
       LoggingService.error("Token exchange with Meta failed", tokenResult.error);
       res.status(400).json({
@@ -3409,7 +3427,7 @@ router2.post("/internal/exchange-code", async (req, res) => {
 router2.get("/callback", async (req, res) => {
   const { code, state, error, error_reason, error_description } = req.query;
   const currentUtcTimestamp = (/* @__PURE__ */ new Date()).toUTCString();
-  const productionCallbackUrl = "https://instaflowv2.vercel.app/api/instagram/callback";
+  const productionCallbackUrl = InstagramService.getRedirectUri();
   if (error || error_reason || error_description) {
     LoggingService.warn("Meta OAuth callback returned error");
     const errorTitle = "Instagram OAuth Authorization Failed";
@@ -3449,8 +3467,8 @@ router2.get("/callback", async (req, res) => {
     return;
   }
   try {
-    LoggingService.info("OAuth state verified on Vercel. Initiating token exchange with Meta...");
-    const tokenResult = await InstagramService.exchangeCodeForToken(code.trim());
+    LoggingService.info(`OAuth state verified on Vercel. Initiating token exchange with Meta using redirect_uri=${productionCallbackUrl}...`);
+    const tokenResult = await InstagramService.exchangeCodeForToken(code.trim(), productionCallbackUrl);
     if (tokenResult.error || !tokenResult.accessToken) {
       LoggingService.error("Token exchange with Meta failed", tokenResult.error);
       res.status(400).send(renderErrorHtml("Token Exchange Failed", "Meta could not complete the Instagram token exchange.", [
