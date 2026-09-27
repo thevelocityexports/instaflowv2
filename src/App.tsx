@@ -328,18 +328,31 @@ export default function App() {
     showToast('Signed out successfully.');
   };
 
-  // If user is not authenticated, show modern Sign In / Sign Up page
-  if (!currentUser && !isCheckingAuth) {
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(() => {
+    return localStorage.getItem('instaflow_onboarding_completed') === 'true';
+  });
+
+  // If user has not completed onboarding and has no connected account, start with Instagram-first Onboarding Flow
+  if ((!hasCompletedOnboarding && !connectedAccount && !isCheckingAuth) || activeTab === 'instagram') {
     return (
-      <AuthPage
-        onAuthSuccess={(user) => {
-          localStorage.removeItem('instaflow_active_reels');
-          setCurrentUser(user);
-          setConnectedAccount(null);
-          setAutomations([]);
-          setRecentActivity([]);
-          setComments([]);
+      <ManychatOnboardingFlow
+        currentConnectedAccount={connectedAccount}
+        onBackToApp={() => {
+          setHasCompletedOnboarding(true);
+          setActiveTab('automations');
+          setAutomationsView('builder');
+        }}
+        onAccountConnected={(acc) => {
+          setConnectedAccount(acc);
           loadData();
+          showToast(`✓ Connected @${acc.username}! Reels synchronized.`);
+        }}
+        onCompleteOnboarding={() => {
+          setHasCompletedOnboarding(true);
+          setActiveTab('automations');
+          setAutomationsView('builder');
+          loadData();
+          showToast('🎉 Welcome! Your Instagram account is ready for automation.');
         }}
       />
     );
@@ -521,26 +534,6 @@ export default function App() {
         {activeTab === 'settings' && (
           <main className="flex-1 overflow-y-auto">
             <Settings />
-          </main>
-        )}
-
-        {/* TAB 7: INSTAGRAM CONNECTION (Exact Manychat Screenshots 1, 2, 3, 4, 5) */}
-        {activeTab === 'instagram' && (
-          <main className="flex-1 overflow-y-auto">
-            <ManychatOnboardingFlow
-              currentConnectedAccount={connectedAccount}
-              onBackToApp={() => {
-                setActiveTab('automations');
-                setAutomationsView('builder');
-              }}
-              onAccountConnected={(acc) => {
-                setConnectedAccount(acc);
-                loadData();
-                setActiveTab('automations');
-                setAutomationsView('builder');
-                showToast(`✓ Connected to @${acc.username}! All live reels synchronized.`);
-              }}
-            />
           </main>
         )}
       </div>

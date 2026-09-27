@@ -2,6 +2,22 @@ import React, { useState } from 'react';
 import {
   ChevronLeft,
   Instagram as InstagramIcon,
+  Check,
+  Sparkles,
+  Users,
+  ShoppingBag,
+  Briefcase,
+  GraduationCap,
+  Store,
+  HelpCircle,
+  MessageSquare,
+  Target,
+  Zap,
+  TrendingUp,
+  Flame,
+  Crown,
+  ShieldCheck,
+  ArrowRight,
 } from 'lucide-react';
 import { InstagramAccount } from '../../shared/types';
 
@@ -9,24 +25,42 @@ interface ManychatOnboardingFlowProps {
   onAccountConnected: (account: InstagramAccount) => void;
   onBackToApp?: () => void;
   currentConnectedAccount?: InstagramAccount | null;
+  onCompleteOnboarding?: () => void;
 }
 
-type OnboardingStep = 'select_channel' | 'connect_instagram';
+export type OnboardingStep =
+  | 'step_1_channel'
+  | 'step_2_connect'
+  | 'step_4_success'
+  | 'step_5_role'
+  | 'step_6_goal'
+  | 'step_7_followers'
+  | 'step_8_plan';
 
 export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
   onAccountConnected,
   onBackToApp,
   currentConnectedAccount,
+  onCompleteOnboarding,
 }) => {
-  const [currentStep, setCurrentStep] = useState<OnboardingStep>('select_channel');
+  const [currentStep, setCurrentStep] = useState<OnboardingStep>(
+    currentConnectedAccount ? 'step_4_success' : 'step_1_channel'
+  );
+  const [connectedAccount, setConnectedAccount] = useState<InstagramAccount | null>(
+    currentConnectedAccount || null
+  );
   const [connectStatus, setConnectStatus] = useState<'idle' | 'connecting' | 'syncing' | 'connected'>('idle');
   const [syncedCount, setSyncedCount] = useState<number | null>(null);
 
+  // Questionnaire responses state
+  const [selectedRole, setSelectedRole] = useState<string>('creator');
+  const [selectedGoal, setSelectedGoal] = useState<string>('comment_to_dm');
+  const [selectedFollowers, setSelectedFollowers] = useState<string>('1k_10k');
+  const [selectedPlan, setSelectedPlan] = useState<'free' | 'pro'>('pro');
+
   /**
-   * Initiates the Direct Instagram Login OAuth flow:
+   * Initiates the Direct Instagram Login OAuth flow via Meta:
    * GET /api/instagram/connect
-   * which redirects to:
-   * https://api.instagram.com/oauth/authorize
    */
   const handleConnectInstagram = () => {
     setConnectStatus('connecting');
@@ -66,13 +100,17 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
       if (event.data && event.data.type === 'INSTAGRAM_CONNECTED') {
         window.removeEventListener('message', messageListener);
         if (event.data.account) {
+          const acc = event.data.account;
+          setConnectedAccount(acc);
           setConnectStatus('syncing');
           const count = event.data.mediaCount || event.data.media?.length || 0;
           setSyncedCount(count);
+          onAccountConnected(acc);
+          
           setTimeout(() => {
             setConnectStatus('connected');
-            onAccountConnected(event.data.account);
-            if (onBackToApp) onBackToApp();
+            // Advance to Step 4: Connection Success Screen
+            setCurrentStep('step_4_success');
           }, 800);
         }
       }
@@ -80,119 +118,249 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
     window.addEventListener('message', messageListener);
   };
 
+  const handleFinishOnboarding = () => {
+    try {
+      localStorage.setItem('instaflow_onboarding_completed', 'true');
+      localStorage.setItem(
+        'instaflow_onboarding_profile',
+        JSON.stringify({
+          role: selectedRole,
+          goal: selectedGoal,
+          followers: selectedFollowers,
+          plan: selectedPlan,
+          completedAt: new Date().toISOString(),
+        })
+      );
+    } catch {}
+
+    if (onCompleteOnboarding) {
+      onCompleteOnboarding();
+    } else if (onBackToApp) {
+      onBackToApp();
+    }
+  };
+
   return (
     <div className="min-h-screen w-full bg-white flex flex-col font-sans select-none overflow-x-hidden">
-      {/* Top Main Container (Dual Column Layout) */}
-      <div className="flex-1 flex flex-col md:flex-row w-full min-h-[90vh]">
-        {/* LEFT COLUMN: Brand Panel with Artwork */}
-        <div className="w-full md:w-1/2 p-8 md:p-16 lg:p-24 flex flex-col justify-between border-b md:border-b-0 md:border-r border-slate-100 bg-[#fafafa]/50">
-          {/* Brand Logo */}
-          <div className="flex items-center gap-2">
-            <span className="font-black text-2xl md:text-3xl tracking-tight text-[#111827]">
-              Manychat
+      {/* Top Header Stepper Indicator */}
+      <div className="border-b border-slate-100 bg-white px-6 py-3.5 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-600 via-pink-500 to-rose-500 flex items-center justify-center text-white shadow-2xs">
+            <Sparkles className="w-4 h-4" />
+          </div>
+          <span className="font-extrabold text-lg tracking-tight text-slate-900">
+            instaflow
+          </span>
+        </div>
+
+        {/* Progress Bar & Step Badge */}
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+            <span>
+              {currentStep === 'step_1_channel' && 'Step 1 of 8: Channel'}
+              {currentStep === 'step_2_connect' && 'Step 2 of 8: Connect'}
+              {currentStep === 'step_4_success' && 'Step 3 of 8: Connected'}
+              {currentStep === 'step_5_role' && 'Step 4 of 8: Profile'}
+              {currentStep === 'step_6_goal' && 'Step 5 of 8: Goals'}
+              {currentStep === 'step_7_followers' && 'Step 6 of 8: Audience'}
+              {currentStep === 'step_8_plan' && 'Step 7 of 8: Plan'}
             </span>
           </div>
+          <div className="w-24 sm:w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[#0066ff] transition-all duration-300 rounded-full"
+              style={{
+                width:
+                  currentStep === 'step_1_channel'
+                    ? '15%'
+                    : currentStep === 'step_2_connect'
+                    ? '30%'
+                    : currentStep === 'step_4_success'
+                    ? '50%'
+                    : currentStep === 'step_5_role'
+                    ? '65%'
+                    : currentStep === 'step_6_goal'
+                    ? '80%'
+                    : currentStep === 'step_7_followers'
+                    ? '90%'
+                    : '100%',
+              }}
+            />
+          </div>
+        </div>
+      </div>
 
-          {/* Center Graphic & Headline */}
-          <div className="my-auto py-12 space-y-8 max-w-md">
-            {/* STEP 1 ILLUSTRATION: Toaster with 2 speech bubbles on checkered mat */}
-            {currentStep === 'select_channel' && (
-              <div className="relative w-36 h-36 mx-auto sm:mx-0">
-                <div className="absolute bottom-2 left-0 w-32 h-14 bg-emerald-100 rounded-2xl transform -skew-x-12 rotate-3 border-2 border-emerald-300 flex flex-wrap p-1 gap-1 overflow-hidden opacity-90 shadow-sm">
-                  <div className="w-4 h-4 bg-emerald-400/40 rounded-xs" />
-                  <div className="w-4 h-4 bg-rose-300/60 rounded-xs" />
-                  <div className="w-4 h-4 bg-emerald-400/40 rounded-xs" />
-                  <div className="w-4 h-4 bg-emerald-500/50 rounded-xs" />
-                  <div className="w-4 h-4 bg-rose-300/60 rounded-xs" />
-                  <div className="w-4 h-4 bg-emerald-400/40 rounded-xs" />
+      {/* Main Container (Dual Column Layout matching ManyChat experience) */}
+      <div className="flex-1 flex flex-col md:flex-row w-full min-h-[calc(100vh-60px)]">
+        {/* LEFT COLUMN: Brand Panel with Artwork */}
+        <div className="w-full md:w-1/2 p-8 md:p-14 lg:p-20 flex flex-col justify-between border-b md:border-b-0 md:border-r border-slate-100 bg-[#fafafa]/80">
+          <div className="my-auto py-8 space-y-6 max-w-md">
+            {/* STEP 1 ILLUSTRATION: Channel Selection */}
+            {currentStep === 'step_1_channel' && (
+              <div className="relative w-32 h-32 mx-auto sm:mx-0">
+                <div className="absolute bottom-2 left-0 w-28 h-12 bg-emerald-100 rounded-2xl transform -skew-x-12 rotate-3 border-2 border-emerald-300 flex flex-wrap p-1 gap-1 overflow-hidden opacity-90 shadow-2xs">
+                  <div className="w-3.5 h-3.5 bg-emerald-400/40 rounded-xs" />
+                  <div className="w-3.5 h-3.5 bg-rose-300/60 rounded-xs" />
+                  <div className="w-3.5 h-3.5 bg-emerald-400/40 rounded-xs" />
+                  <div className="w-3.5 h-3.5 bg-emerald-500/50 rounded-xs" />
                 </div>
-
-                <div className="absolute bottom-4 left-4 w-24 h-20 bg-[#6d28d9] rounded-2xl border-3 border-slate-900 shadow-md flex items-center justify-center">
-                  <div className="w-10 h-1.5 bg-slate-900 rounded-full mb-3" />
-                  <div className="absolute bottom-2.5 right-2.5 w-3 h-3 rounded-full bg-emerald-400 border border-slate-900" />
-                  <div className="absolute top-2 left-2 w-2 h-2 rounded-full bg-pink-400" />
+                <div className="absolute bottom-3 left-3 w-22 h-18 bg-[#6d28d9] rounded-2xl border-2 border-slate-900 shadow-md flex items-center justify-center">
+                  <div className="w-8 h-1.5 bg-slate-900 rounded-full mb-2" />
+                  <div className="absolute bottom-2 right-2 w-2.5 h-2.5 rounded-full bg-emerald-400" />
                 </div>
-
-                <div className="absolute -top-1 left-2 w-12 h-10 bg-emerald-200 border-2 border-slate-900 rounded-2xl rounded-bl-xs flex items-center justify-center shadow-xs animate-bounce">
-                  <div className="w-5 h-1 bg-slate-800 rounded-full" />
+                <div className="absolute -top-1 left-2 w-10 h-8 bg-emerald-200 border-2 border-slate-900 rounded-xl flex items-center justify-center shadow-2xs animate-bounce">
+                  <div className="w-4 h-1 bg-slate-800 rounded-full" />
                 </div>
-                <div className="absolute top-2 left-14 w-12 h-10 bg-rose-200 border-2 border-slate-900 rounded-2xl rounded-br-xs flex items-center justify-center shadow-xs animate-pulse">
-                  <div className="w-5 h-1 bg-slate-800 rounded-full" />
+                <div className="absolute top-2 left-12 w-10 h-8 bg-rose-200 border-2 border-slate-900 rounded-xl flex items-center justify-center shadow-2xs animate-pulse">
+                  <div className="w-4 h-1 bg-slate-800 rounded-full" />
                 </div>
               </div>
             )}
 
-            {/* STEP 2 ILLUSTRATION: Donut ring with starburst rays */}
-            {currentStep === 'connect_instagram' && (
-              <div className="relative w-36 h-36 mx-auto sm:mx-0">
-                <div className="absolute top-1 right-2 w-20 h-20 bg-pink-500 rounded-full blur-[1px] opacity-90 transform rotate-12 clip-path-polygon" />
-                <div className="absolute -top-3 right-6 text-pink-600 font-black text-3xl">✦</div>
-
-                <div className="absolute bottom-2 left-2 w-28 h-28 bg-[#81d4fa] rounded-full border-4 border-slate-900 flex items-center justify-center shadow-md">
-                  <div className="w-14 h-14 bg-amber-700/80 rounded-full border-3 border-slate-900 flex items-center justify-center">
-                    <div className="w-6 h-6 bg-[#fafafa] rounded-full" />
+            {/* STEP 2 ILLUSTRATION: Connect Screen */}
+            {currentStep === 'step_2_connect' && (
+              <div className="relative w-32 h-32 mx-auto sm:mx-0">
+                <div className="absolute top-1 right-2 w-16 h-16 bg-pink-500 rounded-full blur-[1px] opacity-80 transform rotate-12" />
+                <div className="absolute -top-2 right-4 text-pink-600 font-black text-2xl">✦</div>
+                <div className="absolute bottom-2 left-2 w-24 h-24 bg-[#81d4fa] rounded-full border-3 border-slate-900 flex items-center justify-center shadow-md">
+                  <div className="w-12 h-12 bg-amber-600/80 rounded-full border-2 border-slate-900 flex items-center justify-center">
+                    <div className="w-5 h-5 bg-[#fafafa] rounded-full" />
                   </div>
                 </div>
-
-                <div className="absolute bottom-0 right-2 w-10 h-8 bg-pink-500 rounded-xl border-2 border-slate-900 rounded-bl-xs shadow-xs" />
               </div>
             )}
 
-            {/* Headline Text */}
+            {/* STEP 4 ILLUSTRATION: Connected Success */}
+            {currentStep === 'step_4_success' && (
+              <div className="w-20 h-20 rounded-3xl bg-emerald-100 border-2 border-emerald-400 text-emerald-600 flex items-center justify-center shadow-sm">
+                <Check className="w-10 h-10 stroke-[2.5]" />
+              </div>
+            )}
+
+            {/* STEP 5, 6, 7 ILLUSTRATION: Questions */}
+            {(currentStep === 'step_5_role' || currentStep === 'step_6_goal' || currentStep === 'step_7_followers') && (
+              <div className="w-20 h-20 rounded-3xl bg-blue-100 border-2 border-blue-400 text-[#0066ff] flex items-center justify-center shadow-sm">
+                <Sparkles className="w-9 h-9" />
+              </div>
+            )}
+
+            {/* STEP 8 ILLUSTRATION: Plan Selection */}
+            {currentStep === 'step_8_plan' && (
+              <div className="w-20 h-20 rounded-3xl bg-amber-100 border-2 border-amber-400 text-amber-600 flex items-center justify-center shadow-sm">
+                <Crown className="w-10 h-10" />
+              </div>
+            )}
+
+            {/* Left Headline & Subtext */}
             <div className="space-y-3">
-              <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-[#111827] tracking-tight leading-[1.15]">
-                {currentStep === 'select_channel' ? 'Where would you like to start?' : 'Instagram'}
+              <h1 className="text-3xl md:text-4xl font-extrabold text-[#111827] tracking-tight leading-[1.15]">
+                {currentStep === 'step_1_channel' && 'Where would you like to start?'}
+                {currentStep === 'step_2_connect' && 'Connect Instagram'}
+                {currentStep === 'step_4_success' && 'Your Instagram is connected!'}
+                {currentStep === 'step_5_role' && 'What describes you best?'}
+                {currentStep === 'step_6_goal' && 'What is your main goal?'}
+                {currentStep === 'step_7_followers' && 'How large is your audience?'}
+                {currentStep === 'step_8_plan' && 'Choose your growth plan'}
               </h1>
               <p className="text-sm md:text-base text-slate-500 font-normal leading-relaxed">
-                {currentStep === 'select_channel'
-                  ? "Don't worry, you can connect other channels later."
-                  : 'Connect your Instagram account to use Instagram automation.'}
+                {currentStep === 'step_1_channel' && "Don't worry, you can connect other channels later."}
+                {currentStep === 'step_2_connect' && 'Connect your Instagram account to start building automated DMs and comment replies.'}
+                {currentStep === 'step_4_success' && "Let's get your account ready with personalized automation settings."}
+                {currentStep === 'step_5_role' && 'Help us tailor the experience and templates for your specific business workflow.'}
+                {currentStep === 'step_6_goal' && "We'll configure your default triggers and message templates for quick results."}
+                {currentStep === 'step_7_followers' && 'We optimize reply speed and smart variations based on your incoming traffic.'}
+                {currentStep === 'step_8_plan' && 'Start free today, unlock unlimited volume and AI variations with Pro anytime.'}
               </p>
             </div>
           </div>
 
           {/* Bottom Left Navigation Link */}
-          <div className="pt-6">
-            {currentStep === 'select_channel' ? (
+          <div className="pt-4">
+            {currentStep === 'step_1_channel' ? (
               onBackToApp && (
                 <button
                   type="button"
                   onClick={onBackToApp}
-                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-950 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
                 >
                   <ChevronLeft className="w-4 h-4" />
-                  <span>Back to Dashboard</span>
+                  <span>Go to Workspace</span>
                 </button>
               )
-            ) : (
+            ) : currentStep === 'step_2_connect' ? (
               <button
                 type="button"
-                onClick={() => setCurrentStep('select_channel')}
-                className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-950 transition-colors cursor-pointer"
+                onClick={() => setCurrentStep('step_1_channel')}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" />
                 <span>Choose Another Channel</span>
+              </button>
+            ) : currentStep === 'step_4_success' ? (
+              <button
+                type="button"
+                onClick={() => setCurrentStep('step_2_connect')}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Reconnect Account</span>
+              </button>
+            ) : currentStep === 'step_5_role' ? (
+              <button
+                type="button"
+                onClick={() => setCurrentStep('step_4_success')}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Back</span>
+              </button>
+            ) : currentStep === 'step_6_goal' ? (
+              <button
+                type="button"
+                onClick={() => setCurrentStep('step_5_role')}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Back</span>
+              </button>
+            ) : currentStep === 'step_7_followers' ? (
+              <button
+                type="button"
+                onClick={() => setCurrentStep('step_6_goal')}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Back</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setCurrentStep('step_7_followers')}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Back</span>
               </button>
             )}
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Interactive Channel Cards or Connect Screen */}
-        <div className="w-full md:w-1/2 p-6 sm:p-12 lg:p-20 flex flex-col justify-center bg-white">
-          {/* SCREEN 1: Social Media Channel Selection Cards */}
-          {currentStep === 'select_channel' && (
-            <div className="w-full max-w-md mx-auto space-y-4">
-              {/* Instagram Card (Primary & Active) */}
+        {/* RIGHT COLUMN: Interactive Step Experience */}
+        <div className="w-full md:w-1/2 p-6 sm:p-10 lg:p-16 flex flex-col justify-center bg-white">
+          {/* ======================================================== */}
+          {/* STEP 1: Social Media Channel Selection Cards */}
+          {/* ======================================================== */}
+          {currentStep === 'step_1_channel' && (
+            <div className="w-full max-w-md mx-auto space-y-3.5 animate-in fade-in duration-200">
+              {/* Instagram Card (Active Primary) */}
               <div
-                onClick={() => setCurrentStep('connect_instagram')}
-                className="p-5 bg-white rounded-2xl border-2 border-[#e5e7eb] hover:border-[#0066ff] hover:shadow-lg transition-all duration-200 cursor-pointer flex items-center gap-4 group"
+                onClick={() => setCurrentStep('step_2_connect')}
+                className="p-4 sm:p-5 bg-white rounded-2xl border-2 border-[#0066ff]/80 shadow-md hover:border-[#0066ff] hover:shadow-lg transition-all duration-200 cursor-pointer flex items-center gap-4 group ring-2 ring-[#0066ff]/10"
               >
                 <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888] flex items-center justify-center text-white shrink-0 shadow-xs group-hover:scale-105 transition-transform">
-                  <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
-                    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
-                  </svg>
+                  <InstagramIcon className="w-6 h-6 stroke-[2]" />
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <h3 className="text-base font-bold text-slate-900 group-hover:text-[#0066ff] transition-colors">
                       Instagram
@@ -205,72 +373,75 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
                     Supercharge your social media marketing with Instagram Automation.
                   </p>
                 </div>
+                <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-[#0066ff] group-hover:translate-x-0.5 transition-all shrink-0" />
               </div>
 
-              {/* TikTok Card */}
-              <div
-                onClick={() => setCurrentStep('connect_instagram')}
-                className="p-5 bg-white rounded-2xl border border-[#e5e7eb] hover:border-slate-400 hover:shadow-md transition-all cursor-pointer flex items-center gap-4 group"
-              >
-                <div className="w-12 h-12 rounded-2xl bg-[#000000] flex items-center justify-center text-white shrink-0">
+              {/* TikTok Card (Coming soon) */}
+              <div className="p-4 sm:p-5 bg-slate-50/70 rounded-2xl border border-slate-200 opacity-75 flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center text-white shrink-0">
                   <span className="font-black text-lg">♪</span>
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-base font-bold text-slate-900">TikTok</h3>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-base font-bold text-slate-800">TikTok</h3>
+                    <span className="text-[10px] font-semibold text-slate-400 bg-slate-200/70 px-2 py-0.5 rounded-full">
+                      Coming Soon
+                    </span>
+                  </div>
                   <p className="text-xs text-slate-500 mt-0.5 leading-normal">
                     Elevate your marketing with TikTok's seamless automation.
                   </p>
                 </div>
               </div>
 
-              {/* WhatsApp Card */}
-              <div
-                onClick={() => setCurrentStep('connect_instagram')}
-                className="p-5 bg-white rounded-2xl border border-[#e5e7eb] hover:border-slate-400 hover:shadow-md transition-all cursor-pointer flex items-center gap-4 group"
-              >
+              {/* WhatsApp Card (Coming soon) */}
+              <div className="p-4 sm:p-5 bg-slate-50/70 rounded-2xl border border-slate-200 opacity-75 flex items-center gap-4">
                 <div className="w-12 h-12 rounded-2xl bg-[#25d366] flex items-center justify-center text-white shrink-0">
-                  <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
-                    <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.771-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564c.173.087.289.13.332.202.043.072.043.419-.101.824z" />
-                  </svg>
+                  <MessageSquare className="w-6 h-6 stroke-[2]" />
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-base font-bold text-slate-900">WhatsApp</h3>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-base font-bold text-slate-800">WhatsApp</h3>
+                    <span className="text-[10px] font-semibold text-slate-400 bg-slate-200/70 px-2 py-0.5 rounded-full">
+                      Coming Soon
+                    </span>
+                  </div>
                   <p className="text-xs text-slate-500 mt-0.5 leading-normal">
                     Reach a global audience on the most popular messaging app.
                   </p>
                 </div>
               </div>
 
-              {/* Facebook Messenger Card */}
-              <div
-                onClick={() => setCurrentStep('connect_instagram')}
-                className="p-5 bg-white rounded-2xl border border-[#e5e7eb] hover:border-slate-400 hover:shadow-md transition-all cursor-pointer flex items-center gap-4 group"
-              >
+              {/* Facebook Messenger Card (Coming soon) */}
+              <div className="p-4 sm:p-5 bg-slate-50/70 rounded-2xl border border-slate-200 opacity-75 flex items-center gap-4">
                 <div className="w-12 h-12 rounded-2xl bg-[#0084ff] flex items-center justify-center text-white shrink-0">
-                  <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
-                    <path d="M12 2C6.477 2 2 6.145 2 11.258c0 2.91 1.455 5.527 3.735 7.205V22l3.39-1.86c.91.252 1.875.389 2.875.389 5.523 0 10-4.145 10-9.258C22 6.145 17.523 2 12 2zm1.07 12.448l-2.735-2.915-5.335 2.915 5.865-6.223 2.805 2.915 5.265-2.915-5.865 6.223z" />
-                  </svg>
+                  <Zap className="w-6 h-6 stroke-[2]" />
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-base font-bold text-slate-900">Facebook Messenger</h3>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-base font-bold text-slate-800">Facebook Messenger</h3>
+                    <span className="text-[10px] font-semibold text-slate-400 bg-slate-200/70 px-2 py-0.5 rounded-full">
+                      Coming Soon
+                    </span>
+                  </div>
                   <p className="text-xs text-slate-500 mt-0.5 leading-normal">
                     Create Facebook Messenger automation to keep customers happy.
                   </p>
                 </div>
               </div>
 
-              {/* Telegram Card */}
-              <div
-                onClick={() => setCurrentStep('connect_instagram')}
-                className="p-5 bg-white rounded-2xl border border-[#e5e7eb] hover:border-slate-400 hover:shadow-md transition-all cursor-pointer flex items-center gap-4 group"
-              >
+              {/* Telegram Card (Coming soon) */}
+              <div className="p-4 sm:p-5 bg-slate-50/70 rounded-2xl border border-slate-200 opacity-75 flex items-center gap-4">
                 <div className="w-12 h-12 rounded-2xl bg-[#229ed9] flex items-center justify-center text-white shrink-0">
-                  <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.19-.08-.05-.19-.02-.27 0-.12.03-1.99 1.27-5.61 3.72-.53.36-1.01.54-1.44.53-.47-.01-1.38-.27-2.06-.49-.83-.27-1.49-.42-1.43-.88.03-.24.37-.49 1.02-.75 4-1.74 6.67-2.89 8.02-3.45 3.82-1.58 4.62-1.85 5.14-1.86.11 0 .37.03.54.17.14.12.18.28.2.45-.02.07-.02.19-.04.36z" />
-                  </svg>
+                  <span className="font-bold text-lg">✈</span>
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-base font-bold text-slate-900">Telegram</h3>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-base font-bold text-slate-800">Telegram</h3>
+                    <span className="text-[10px] font-semibold text-slate-400 bg-slate-200/70 px-2 py-0.5 rounded-full">
+                      Coming Soon
+                    </span>
+                  </div>
                   <p className="text-xs text-slate-500 mt-0.5 leading-normal">
                     Power up your business with Telegram automation.
                   </p>
@@ -279,26 +450,48 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
             </div>
           )}
 
-          {/* SCREEN 2: Connect Instagram (Simplified Single Connection Experience) */}
-          {currentStep === 'connect_instagram' && (
+          {/* ======================================================== */}
+          {/* STEP 2: Connect Instagram via Meta OAuth */}
+          {/* ======================================================== */}
+          {currentStep === 'step_2_connect' && (
             <div className="w-full max-w-md mx-auto space-y-6 animate-in fade-in duration-200">
-              <div className="space-y-2">
-                <h3 className="text-2xl font-bold text-slate-900">Instagram</h3>
-                <p className="text-sm text-slate-500 leading-relaxed">
-                  Connect your Instagram account to use Instagram automation.
+              <div className="p-6 bg-slate-50/80 border border-slate-200/90 rounded-2xl space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888] flex items-center justify-center text-white shadow-xs">
+                    <InstagramIcon className="w-5 h-5 stroke-[2.2]" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Meta Instagram API</h3>
+                    <p className="text-xs text-slate-500">Official Graph API integration</p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Log in with your Instagram Professional / Creator account or connected Facebook Page to allow InstaFlow to listen for comments and reply via DM.
                 </p>
+
+                <div className="space-y-2 pt-1 text-xs text-slate-500">
+                  <div className="flex items-center gap-2">
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Instant synchronization of active reels and posts</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Safe official Meta permissions (No account credentials stored)</span>
+                  </div>
+                </div>
               </div>
 
               <button
                 type="button"
                 onClick={handleConnectInstagram}
                 disabled={connectStatus === 'connecting' || connectStatus === 'syncing'}
-                className="w-full py-3.5 bg-[#0066ff] hover:bg-[#0052cc] text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-80"
+                className="w-full py-4 bg-[#0066ff] hover:bg-[#0052cc] text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-[0.99] flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-80"
               >
                 {connectStatus === 'idle' && (
                   <>
                     <InstagramIcon className="w-4 h-4" />
-                    <span>Connect Instagram</span>
+                    <span>Connect via Meta</span>
                   </>
                 )}
                 {connectStatus === 'connecting' && (
@@ -310,16 +503,439 @@ export const ManychatOnboardingFlow: React.FC<ManychatOnboardingFlowProps> = ({
                 {connectStatus === 'syncing' && (
                   <>
                     <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Syncing Instagram content...</span>
+                    <span>Synchronizing Instagram Reels & Posts...</span>
                   </>
                 )}
                 {connectStatus === 'connected' && (
                   <>
-                    <span className="text-emerald-300 font-bold">✓</span>
-                    <span>Connected{syncedCount !== null ? ` (${syncedCount} posts/reels synced)` : ''}!</span>
+                    <Check className="w-4 h-4 text-emerald-300" />
+                    <span>Connected!</span>
                   </>
                 )}
               </button>
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* STEP 4: Connected Success Screen */}
+          {/* ======================================================== */}
+          {currentStep === 'step_4_success' && (
+            <div className="w-full max-w-md mx-auto space-y-6 animate-in fade-in duration-200">
+              {/* Instagram Account Connected Card */}
+              <div className="p-6 bg-white rounded-2xl border-2 border-emerald-500/80 shadow-md space-y-4 ring-4 ring-emerald-50">
+                <div className="flex items-center gap-4">
+                  {/* Profile Avatar */}
+                  <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-slate-200 bg-gradient-to-tr from-purple-600 via-pink-500 to-rose-500 flex items-center justify-center text-white text-lg font-bold shadow-xs shrink-0">
+                    {connectedAccount?.profilePictureUrl ? (
+                      <img
+                        src={connectedAccount.profilePictureUrl}
+                        alt={connectedAccount.username}
+                        referrerPolicy="no-referrer"
+                        crossOrigin="anonymous"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <span>
+                        {(connectedAccount?.name || connectedAccount?.username || 'IG').slice(0, 2).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-base text-slate-900 truncate">
+                        {connectedAccount?.name || connectedAccount?.username || 'Instagram Account'}
+                      </span>
+                      <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full flex items-center gap-1 shrink-0">
+                        <Check className="w-3 h-3" /> Connected
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium truncate mt-0.5">
+                      @{connectedAccount?.username || 'account'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <span>Channel: Instagram Professional</span>
+                  <span className="text-emerald-600 font-semibold">✓ Ready to Automate</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCurrentStep('step_5_role')}
+                className="w-full py-3.5 bg-[#0066ff] hover:bg-[#0052cc] text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>Continue</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* STEP 5: Onboarding Question 1 - Role */}
+          {/* ======================================================== */}
+          {currentStep === 'step_5_role' && (
+            <div className="w-full max-w-md mx-auto space-y-4 animate-in fade-in duration-200">
+              <div className="space-y-2.5">
+                {[
+                  {
+                    id: 'creator',
+                    title: 'Creator / Influencer',
+                    desc: 'Grow followers and send automated links when people comment on reels.',
+                    icon: Sparkles,
+                  },
+                  {
+                    id: 'ecommerce',
+                    title: 'E-commerce Brand',
+                    desc: 'Deliver product links, discount codes, and convert comments into sales.',
+                    icon: ShoppingBag,
+                  },
+                  {
+                    id: 'agency',
+                    title: 'Digital Marketing Agency',
+                    desc: 'Manage social automations and lead funnels for multiple clients.',
+                    icon: Briefcase,
+                  },
+                  {
+                    id: 'coach',
+                    title: 'Coach / Consultant / Educator',
+                    desc: 'Book discovery calls and distribute lead magnets automatically.',
+                    icon: GraduationCap,
+                  },
+                  {
+                    id: 'local_business',
+                    title: 'Local Business / Service',
+                    desc: 'Answer pricing questions, business hours, and location inquiries 24/7.',
+                    icon: Store,
+                  },
+                  {
+                    id: 'other',
+                    title: 'Other',
+                    desc: 'Exploring social automation for general marketing.',
+                    icon: HelpCircle,
+                  },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const isSelected = selectedRole === item.id;
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => setSelectedRole(item.id)}
+                      className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer flex items-center gap-3.5 ${
+                        isSelected
+                          ? 'border-[#0066ff] bg-blue-50/40 shadow-xs'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div
+                        className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                          isSelected ? 'bg-[#0066ff] text-white' : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-xs font-bold text-slate-900">{item.title}</h4>
+                        <p className="text-[11px] text-slate-500 leading-tight mt-0.5">{item.desc}</p>
+                      </div>
+                      {isSelected && <Check className="w-4 h-4 text-[#0066ff] shrink-0" />}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCurrentStep('step_6_goal')}
+                className="w-full py-3.5 bg-[#0066ff] hover:bg-[#0052cc] text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer mt-2"
+              >
+                <span>Continue</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* STEP 6: Onboarding Question 2 - Main Goal */}
+          {/* ======================================================== */}
+          {currentStep === 'step_6_goal' && (
+            <div className="w-full max-w-md mx-auto space-y-4 animate-in fade-in duration-200">
+              <div className="space-y-2.5">
+                {[
+                  {
+                    id: 'comment_to_dm',
+                    title: 'Auto-Send Links on Comments',
+                    desc: 'When users comment "LINK" or "PRICE", automatically DM them the link.',
+                    icon: MessageSquare,
+                  },
+                  {
+                    id: 'lead_generation',
+                    title: 'Capture Leads & Book Calls',
+                    desc: 'Collect contact information and send Calendly / landing page links.',
+                    icon: Target,
+                  },
+                  {
+                    id: 'customer_support',
+                    title: '24/7 Automated Customer Support',
+                    desc: 'Answer FAQs about shipping, store hours, and product features instantly.',
+                    icon: Zap,
+                  },
+                  {
+                    id: 'grow_engagement',
+                    title: 'Grow Engagement & Followers',
+                    desc: 'Boost algorithmic reach with instant replies to every post comment.',
+                    icon: TrendingUp,
+                  },
+                  {
+                    id: 'product_drops',
+                    title: 'Product Launches & Flash Sales',
+                    desc: 'Broadcast exclusive discount codes to followers who comment on reels.',
+                    icon: Flame,
+                  },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const isSelected = selectedGoal === item.id;
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => setSelectedGoal(item.id)}
+                      className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer flex items-center gap-3.5 ${
+                        isSelected
+                          ? 'border-[#0066ff] bg-blue-50/40 shadow-xs'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div
+                        className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                          isSelected ? 'bg-[#0066ff] text-white' : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-xs font-bold text-slate-900">{item.title}</h4>
+                        <p className="text-[11px] text-slate-500 leading-tight mt-0.5">{item.desc}</p>
+                      </div>
+                      {isSelected && <Check className="w-4 h-4 text-[#0066ff] shrink-0" />}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCurrentStep('step_7_followers')}
+                className="w-full py-3.5 bg-[#0066ff] hover:bg-[#0052cc] text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer mt-2"
+              >
+                <span>Continue</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* STEP 7: Onboarding Question 3 - Followers Count */}
+          {/* ======================================================== */}
+          {currentStep === 'step_7_followers' && (
+            <div className="w-full max-w-md mx-auto space-y-4 animate-in fade-in duration-200">
+              <div className="space-y-2.5">
+                {[
+                  {
+                    id: 'under_1k',
+                    title: 'Under 1,000 followers',
+                    desc: 'Just getting started with Instagram growth.',
+                  },
+                  {
+                    id: '1k_10k',
+                    title: '1,000 – 10,000 followers',
+                    desc: 'Consistent audience with regular engagement on posts.',
+                  },
+                  {
+                    id: '10k_50k',
+                    title: '10,000 – 50,000 followers',
+                    desc: 'Established creator or growing brand with viral reels.',
+                  },
+                  {
+                    id: '50k_100k',
+                    title: '50,000 – 100,000 followers',
+                    desc: 'High-volume community with hundreds of comments per post.',
+                  },
+                  {
+                    id: '100k_plus',
+                    title: '100,000+ followers',
+                    desc: 'Enterprise scale requiring high-throughput DM dispatch.',
+                  },
+                ].map((item) => {
+                  const isSelected = selectedFollowers === item.id;
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => setSelectedFollowers(item.id)}
+                      className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+                        isSelected
+                          ? 'border-[#0066ff] bg-blue-50/40 shadow-xs'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900">{item.title}</h4>
+                        <p className="text-[11px] text-slate-500 mt-0.5">{item.desc}</p>
+                      </div>
+                      <div
+                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                          isSelected ? 'border-[#0066ff] bg-[#0066ff] text-white' : 'border-slate-300'
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCurrentStep('step_8_plan')}
+                className="w-full py-3.5 bg-[#0066ff] hover:bg-[#0052cc] text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer mt-2"
+              >
+                <span>Continue</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* STEP 8: Plan Selection Free vs Pro */}
+          {/* ======================================================== */}
+          {currentStep === 'step_8_plan' && (
+            <div className="w-full max-w-lg mx-auto space-y-4 animate-in fade-in duration-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* Free Plan */}
+                <div
+                  onClick={() => setSelectedPlan('free')}
+                  className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                    selectedPlan === 'free'
+                      ? 'border-[#0066ff] bg-blue-50/20 shadow-sm ring-2 ring-[#0066ff]/20'
+                      : 'border-slate-200 hover:border-slate-300 bg-white'
+                  }`}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Free Tier</span>
+                      <div
+                        className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                          selectedPlan === 'free' ? 'border-[#0066ff] bg-[#0066ff] text-white' : 'border-slate-300'
+                        }`}
+                      >
+                        {selectedPlan === 'free' && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-2xl font-black text-slate-900">$0</span>
+                      <span className="text-xs text-slate-400"> / month</span>
+                    </div>
+                    <ul className="space-y-2 text-[11px] text-slate-600">
+                      <li className="flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span>1 Instagram Account</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span>Up to 1,000 Auto-DMs / mo</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span>Post & Reel Comment Triggers</span>
+                      </li>
+                    </ul>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedPlan('free');
+                      handleFinishOnboarding();
+                    }}
+                    className="w-full mt-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all"
+                  >
+                    Start with Free
+                  </button>
+                </div>
+
+                {/* Pro Plan (Recommended) */}
+                <div
+                  onClick={() => setSelectedPlan('pro')}
+                  className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden ${
+                    selectedPlan === 'pro'
+                      ? 'border-[#0066ff] bg-blue-50/40 shadow-md ring-2 ring-[#0066ff]/30'
+                      : 'border-slate-200 hover:border-slate-300 bg-white'
+                  }`}
+                >
+                  <div className="absolute top-0 right-0 bg-[#0066ff] text-white text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-bl-lg">
+                    POPULAR
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-[#0066ff]">Pro Growth</span>
+                      <div
+                        className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                          selectedPlan === 'pro' ? 'border-[#0066ff] bg-[#0066ff] text-white' : 'border-slate-300'
+                        }`}
+                      >
+                        {selectedPlan === 'pro' && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-2xl font-black text-slate-900">$19</span>
+                      <span className="text-xs text-slate-400"> / month</span>
+                    </div>
+                    <ul className="space-y-2 text-[11px] text-slate-700">
+                      <li className="flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-[#0066ff] shrink-0" />
+                        <span className="font-semibold">Unlimited Auto-DMs</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-[#0066ff] shrink-0" />
+                        <span>Smart Anti-Spam DM Variations</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-[#0066ff] shrink-0" />
+                        <span>Priority Media Sync & Triggers</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-[#0066ff] shrink-0" />
+                        <span>Lead Capture & Contact Export</span>
+                      </li>
+                    </ul>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedPlan('pro');
+                      handleFinishOnboarding();
+                    }}
+                    className="w-full mt-5 py-2.5 bg-[#0066ff] hover:bg-[#0052cc] text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+                  >
+                    Start 14-Day Free Pro Trial
+                  </button>
+                </div>
+              </div>
+
+              <div className="text-center pt-2">
+                <button
+                  type="button"
+                  onClick={handleFinishOnboarding}
+                  className="text-xs text-slate-500 hover:text-slate-800 font-semibold transition-colors cursor-pointer"
+                >
+                  Continue to Workspace →
+                </button>
+              </div>
             </div>
           )}
         </div>

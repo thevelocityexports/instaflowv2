@@ -255,15 +255,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span>My Profile</span>
         </button>
 
-        <a
-          href="https://help.manychat.com"
-          target="_blank"
-          rel="noreferrer"
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 text-slate-600 hover:text-slate-900 transition-colors"
+        <button
+          onClick={() => setActiveTab('settings')}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer text-left"
         >
           <HelpCircle className="w-4 h-4 text-slate-400" />
-          <span>Help</span>
-        </a>
+          <span>Help & Settings</span>
+        </button>
       </div>
     </aside>
   );
