@@ -469,7 +469,7 @@ export class InstagramService {
       scope: this.REQUIRED_SCOPES,
       state,
       enable_fb_login: '0',
-      force_authentication: '1',
+      force_authentication: '0',
     });
 
     return {

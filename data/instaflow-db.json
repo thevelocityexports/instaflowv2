@@ -6,10 +6,148 @@
       "fullName": "Admin User",
       "avatarUrl": "https://api.dicebear.com/7.x/initials/svg?seed=Admin",
       "createdAt": "2026-09-26T14:38:57.254Z"
+    },
+    {
+      "id": "3b7ce8bf-49f1-4883-8e67-10de8cf3df85",
+      "email": "admin@instaflow.app",
+      "fullName": "Admin User",
+      "avatarUrl": "https://api.dicebear.com/7.x/initials/svg?seed=Admin",
+      "createdAt": "2026-09-27T06:39:35.601Z"
+    },
+    {
+      "id": "3b7ce8bf-49f1-4883-8e67-10de8cf3df85",
+      "email": "admin@instaflow.app",
+      "fullName": "Admin User",
+      "avatarUrl": "https://api.dicebear.com/7.x/initials/svg?seed=Admin",
+      "createdAt": "2026-09-27T06:39:35.601Z"
     }
   ],
   "accounts": [],
   "automations": [],
-  "cachedMedia": {},
-  "logs": []
+  "cachedMedia": {
+    "panchalohajewels": [
+      {
+        "id": "reel_test_01",
+        "caption": "Test reel caption",
+        "mediaType": "VIDEO",
+        "mediaProductType": "REELS",
+        "isReel": true,
+        "permalink": "https://instagram.com/reel/test01",
+        "timestamp": "2026-09-27T06:39:45.735Z"
+      }
+    ]
+  },
+  "logs": [
+    {
+      "userId": "usr_default_01",
+      "automationId": "33488aca-7340-4851-8df3-92a6df59aca3",
+      "automationName": "Price Inquiry Automation",
+      "instagramAccountId": "ig_acc_01",
+      "instagramUserId": "test_user_77",
+      "username": "designer_pat",
+      "commentId": "mock_test_1790491183996",
+      "commentText": "What is the PRICE of this piece?",
+      "matchedKeyword": "PRICE",
+      "actionType": "public_reply",
+      "actionStatus": "success",
+      "metaResponse": {
+        "test_mode": true,
+        "action": "public_reply",
+        "comment_id": "mock_test_1790491183996",
+        "reply_body": "Price is $49",
+        "timestamp": "2026-09-27T06:39:44.790Z"
+      },
+      "isTestEvent": true,
+      "id": "a12bf73f-68bc-4778-b414-ffaf1a6982a4",
+      "createdAt": "2026-09-27T06:39:44.790Z"
+    },
+    {
+      "userId": "usr_default_01",
+      "automationId": "fca76575-31b3-4670-b4fb-2f7747e6252d",
+      "automationName": "Auto A Price",
+      "instagramAccountId": "ig_acc_01",
+      "instagramUserId": "user_multi_1",
+      "username": "multi_user",
+      "commentId": "multi_comment_1790491180836",
+      "commentText": "I need MULTI_MATCH_KEY right now",
+      "matchedKeyword": "MULTI_MATCH_KEY",
+      "actionType": "public_reply",
+      "actionStatus": "success",
+      "metaResponse": {
+        "test_mode": true,
+        "action": "public_reply",
+        "comment_id": "multi_comment_1790491180836",
+        "reply_body": "Reply A",
+        "timestamp": "2026-09-27T06:39:42.046Z"
+      },
+      "isTestEvent": true,
+      "id": "6532be56-b52e-4a84-8a11-b5eba324e1fe",
+      "createdAt": "2026-09-27T06:39:42.046Z"
+    },
+    {
+      "userId": "usr_default_01",
+      "automationId": "9febf737-f19f-4cb2-ba3f-da3df592d73b",
+      "automationName": "Auto B Price",
+      "instagramAccountId": "ig_acc_01",
+      "instagramUserId": "user_multi_1",
+      "username": "multi_user",
+      "commentId": "multi_comment_1790491180836",
+      "commentText": "I need MULTI_MATCH_KEY right now",
+      "matchedKeyword": "MULTI_MATCH_KEY",
+      "actionType": "private_dm",
+      "actionStatus": "success",
+      "metaResponse": {
+        "test_mode": true,
+        "action": "private_dm",
+        "recipient_user_id": "user_multi_1",
+        "message_preview": "DM B",
+        "timestamp": "2026-09-27T06:39:41.848Z"
+      },
+      "isTestEvent": true,
+      "id": "f7d0949e-a210-4023-bb83-d8ef05a86186",
+      "createdAt": "2026-09-27T06:39:41.848Z"
+    },
+    {
+      "userId": "usr_default_01",
+      "instagramAccountId": "ig_acc_01",
+      "instagramUserId": "user_dup_1",
+      "username": "dup_user",
+      "commentId": "comment_idempotent_1790491177949",
+      "commentText": "PRICE please",
+      "actionType": "duplicate_ignored",
+      "actionStatus": "skipped",
+      "errorMessage": "Event already processed (Idempotency guard)",
+      "isTestEvent": false,
+      "id": "fc528d30-18b2-4a27-820a-8bdbb39e90c3",
+      "createdAt": "2026-09-27T06:39:39.839Z"
+    },
+    {
+      "userId": "usr_default_01",
+      "instagramAccountId": "ig_acc_01",
+      "instagramUserId": "user_dup_1",
+      "username": "dup_user",
+      "commentId": "comment_idempotent_1790491177949",
+      "commentText": "PRICE please",
+      "actionType": "no_match",
+      "actionStatus": "skipped",
+      "errorMessage": "No active automations configured for this account",
+      "isTestEvent": false,
+      "id": "149ce46f-13b1-43bb-bf05-4eee1ab8e028",
+      "createdAt": "2026-09-27T06:39:39.374Z"
+    },
+    {
+      "userId": "usr_default_01",
+      "instagramAccountId": "ig_acc_01",
+      "instagramUserId": "user_test_99",
+      "username": "tester",
+      "commentId": "comment_inactive_test_1790491176159",
+      "commentText": "Here is TEST_INACTIVE_KEYWORD for you",
+      "actionType": "no_match",
+      "actionStatus": "skipped",
+      "errorMessage": "No active automations configured for this account",
+      "isTestEvent": false,
+      "id": "57844141-bf88-4b5a-9af6-e948ce82abf8",
+      "createdAt": "2026-09-27T06:39:37.194Z"
+    }
+  ]
 }
