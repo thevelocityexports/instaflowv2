@@ -473,7 +473,7 @@ export class InstagramService {
     });
 
     return {
-      url: `https://api.instagram.com/oauth/authorize?${params.toString()}`,
+      url: `https://www.instagram.com/oauth/authorize?${params.toString()}`,
       isConfigured: true,
       state,
     };
